@@ -1,0 +1,14 @@
+# Queen's Palace Eatery & Event Hall
+User-agent: *
+Disallow: /q/
+Disallow: /admin/
+Disallow: /cashier/
+Disallow: /pos/
+Disallow: /kitchen/
+Disallow: /customer/
+Disallow: /dashboard
+
+# Allow public landing and general menu
+Allow: /
+Allow: /menu
+Allow: /assets/
