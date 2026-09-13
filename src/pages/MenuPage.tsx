@@ -164,11 +164,17 @@ export const MenuPage: React.FC = () => {
                 <div>
                   <div className="relative h-44 bg-stone-100 overflow-hidden">
                     <img
-                      src={resolveMediaUrl(item.image_path || item.image) || "/queen-logo.png"}
+                      src={resolveMediaUrl(item.image_path || item.image)}
                       alt={item.name}
                       className="w-full h-full object-cover"
                       loading="lazy"
                       referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        const target = e.currentTarget as HTMLImageElement;
+                        if (!target.src.endsWith("/queen-logo.png")) {
+                          target.src = "/queen-logo.png";
+                        }
+                      }}
                     />
                     <div className="absolute top-2.5 right-2.5">
                       <Badge variant="neutral" size="sm">

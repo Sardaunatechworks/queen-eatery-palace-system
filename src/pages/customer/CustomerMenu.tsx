@@ -51,11 +51,17 @@ const MenuCard = React.memo(
         <div>
           <div className="relative aspect-[4/3] bg-stone-100 border-b border-stone-100 overflow-hidden">
             <img
-              src={resolveMediaUrl(item.image_path || item.image) || "/queen-logo.png"}
+              src={resolveMediaUrl(item.image_path || item.image)}
               alt={item.name}
               className="w-full h-full object-cover"
               loading="lazy"
               referrerPolicy="no-referrer"
+              onError={(e) => {
+                const target = e.currentTarget as HTMLImageElement;
+                if (!target.src.endsWith("/queen-logo.png")) {
+                  target.src = "/queen-logo.png";
+                }
+              }}
             />
             <div className="absolute top-2.5 right-2.5">
               <Badge variant="neutral" size="sm">
@@ -399,10 +405,16 @@ export const CustomerMenu: React.FC = () => {
                 {/* Dish image thumbnail */}
                 <div className="w-12 h-12 rounded-lg bg-stone-100 border border-stone-200 overflow-hidden shrink-0">
                   <img
-                    src={resolveMediaUrl(i.item.image_path || i.item.image) || "/queen-logo.png"}
+                    src={resolveMediaUrl(i.item.image_path || i.item.image)}
                     alt={i.item.name}
                     className="w-full h-full object-cover"
                     loading="lazy"
+                    onError={(e) => {
+                      const target = e.currentTarget as HTMLImageElement;
+                      if (!target.src.endsWith("/queen-logo.png")) {
+                        target.src = "/queen-logo.png";
+                      }
+                    }}
                   />
                 </div>
 

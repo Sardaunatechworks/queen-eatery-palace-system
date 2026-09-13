@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { getGuestMenu, submitGuestOrder } from '../../services/qrGuestService';
 import type { GuestMenuResponse, GuestMenuItem, GuestOrderSubmission } from '../../types';
+import { resolveMediaUrl } from '../../utils/media';
 import { GuestHeader } from './GuestHeader';
 import { GuestCartDrawer, CartLineItem } from './GuestCartDrawer';
 
@@ -297,21 +298,15 @@ export const GuestMenuPage: React.FC = () => {
                 >
                   {/* Dish Thumbnail */}
                   <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-gray-100 border border-gray-200 flex-shrink-0 overflow-hidden relative">
-                    {dish.image_url ? (
-                      <img
-                        src={dish.image_url}
-                        alt={dish.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
-                        <Utensils className="w-6 h-6 stroke-1" />
-                        <span className="text-[9px] uppercase font-bold mt-1 text-gray-300">
-                          Royal Plate
-                        </span>
-                      </div>
-                    )}
+                    <img
+                      src={resolveMediaUrl(dish.image_url || (dish as any).image_path) || "/queen-logo.png"}
+                      alt={dish.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = "/queen-logo.png";
+                      }}
+                    />
                   </div>
 
                   {/* Dish Content */}

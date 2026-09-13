@@ -786,6 +786,12 @@ export const MenuManagement: React.FC = () => {
                           alt={item.name}
                           className="w-10 h-10 rounded-md object-cover border border-stone-200 bg-stone-100"
                           referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            const target = e.currentTarget as HTMLImageElement;
+                            if (!target.src.endsWith("/queen-logo.png")) {
+                              target.src = "/queen-logo.png";
+                            }
+                          }}
                         />
                       </td>
                       <td className="py-2.5 px-4 max-w-xs">
@@ -1389,11 +1395,17 @@ export const MenuManagement: React.FC = () => {
             <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
               {/* Dish Visual & Overview */}
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 p-4 rounded-xl bg-stone-50 border border-stone-200/80">
-                <img
-                  src={resolveMediaUrl(reviewItem.image_path || reviewItem.image) || "/queen-logo.png"}
-                  alt={reviewItem.name}
-                  className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl object-cover border border-stone-200 shadow-xs bg-white shrink-0"
-                />
+                  <img
+                    src={resolveMediaUrl(reviewItem.image_path || reviewItem.image)}
+                    alt={reviewItem.name}
+                    className="w-16 h-16 rounded-xl object-cover border border-stone-200 shrink-0"
+                    onError={(e) => {
+                      const target = e.currentTarget as HTMLImageElement;
+                      if (!target.src.endsWith("/queen-logo.png")) {
+                        target.src = "/queen-logo.png";
+                      }
+                    }}
+                  />
                 <div className="flex-1 text-center sm:text-left space-y-1.5 w-full">
                   <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
                     <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-xs font-semibold">

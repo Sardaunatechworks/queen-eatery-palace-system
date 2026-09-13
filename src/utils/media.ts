@@ -4,14 +4,14 @@
  * or dev server proxy.
  */
 
-export function resolveMediaUrl(url?: string | null): string {
+export function resolveMediaUrl(url?: string | null, fallback = "/queen-logo.png"): string {
   if (!url || typeof url !== "string") {
-    return "";
+    return fallback;
   }
 
   const trimmed = url.trim();
   if (!trimmed) {
-    return "";
+    return fallback;
   }
 
   // If already absolute or blob/data URI, return as-is
@@ -34,13 +34,18 @@ export function resolveMediaUrl(url?: string | null): string {
     return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
   }
 
-  // Backend uploads: prepend API origin
-  const apiBase = (import.meta.env.VITE_API_URL || "https://api.queenspalaceeatery.com").replace(/\/+$/, "");
-  const cleanPath = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-
-  if (cleanPath.startsWith("/uploads/") || cleanPath.startsWith("/api/")) {
-    return `${apiBase}${cleanPath}`;
+  // Backend uploads: extract clean origin from VITE_API_URL
+  let apiOrigin = "https://api.queenspalaceeatery.com";
+  try {
+    const rawApi = (import.meta.env.VITE_API_URL as string) || "https://api.queenspalaceeatery.com";
+    if (rawApi.startsWith("http://") || rawApi.startsWith("https://")) {
+      const parsed = new URL(rawApi);
+      apiOrigin = parsed.origin;
+    }
+  } catch {
+    apiOrigin = "https://api.queenspalaceeatery.com";
   }
 
-  return `${apiBase}${cleanPath}`;
+  const cleanPath = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  return `${apiOrigin}${cleanPath}`;
 }
