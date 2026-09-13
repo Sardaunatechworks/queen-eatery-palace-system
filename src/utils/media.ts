@@ -24,13 +24,23 @@ export function resolveMediaUrl(url?: string | null): string {
     return trimmed;
   }
 
-  // Get configured API base URL from Vite environment
-  const apiBase = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
+  // Frontend public static assets (e.g., logo, placeholders)
+  if (
+    trimmed === "/queen-logo.png" ||
+    trimmed === "queen-logo.png" ||
+    trimmed.startsWith("/assets/") ||
+    trimmed.startsWith("assets/")
+  ) {
+    return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  }
+
+  // Backend uploads: prepend API origin
+  const apiBase = (import.meta.env.VITE_API_URL || "https://api.queenspalaceeatery.com").replace(/\/+$/, "");
   const cleanPath = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 
-  if (apiBase) {
+  if (cleanPath.startsWith("/uploads/") || cleanPath.startsWith("/api/")) {
     return `${apiBase}${cleanPath}`;
   }
 
-  return cleanPath;
+  return `${apiBase}${cleanPath}`;
 }

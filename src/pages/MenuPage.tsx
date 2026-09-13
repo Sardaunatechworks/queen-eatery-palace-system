@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { Plus, Utensils, ArrowLeft } from "lucide-react";
 import { MenuItem } from "./admin/MenuManagement";
 import { formatNaira } from "../utils/format";
+import { resolveMediaUrl } from "../utils/media";
 import queenLogo from "../assets/queen-logo.png";
 import { SearchInput } from "../components/ui/Input";
 import { Badge } from "../components/ui";
@@ -163,7 +164,7 @@ export const MenuPage: React.FC = () => {
                 <div>
                   <div className="relative h-44 bg-stone-100 overflow-hidden">
                     <img
-                      src={item.image_path || item.image || "/queen-logo.png"}
+                      src={resolveMediaUrl(item.image_path || item.image) || "/queen-logo.png"}
                       alt={item.name}
                       className="w-full h-full object-cover"
                       loading="lazy"

@@ -21,6 +21,7 @@ import {
 import { MenuItem } from "../admin/MenuManagement";
 import { usePaystackPayment } from "react-paystack";
 import { formatNaira } from "../../utils/format";
+import { resolveMediaUrl } from "../../utils/media";
 import { useUI } from "../../context/UIContext";
 import { ReceiptModal } from "../../components/ReceiptModal";
 import { PaymentModal } from "../../components/PaymentModal";
@@ -50,7 +51,7 @@ const MenuCard = React.memo(
         <div>
           <div className="relative aspect-[4/3] bg-stone-100 border-b border-stone-100 overflow-hidden">
             <img
-              src={item.image_path || item.image || "/queen-logo.png"}
+              src={resolveMediaUrl(item.image_path || item.image) || "/queen-logo.png"}
               alt={item.name}
               className="w-full h-full object-cover"
               loading="lazy"
@@ -398,7 +399,7 @@ export const CustomerMenu: React.FC = () => {
                 {/* Dish image thumbnail */}
                 <div className="w-12 h-12 rounded-lg bg-stone-100 border border-stone-200 overflow-hidden shrink-0">
                   <img
-                    src={i.item.image_path || i.item.image || "/queen-logo.png"}
+                    src={resolveMediaUrl(i.item.image_path || i.item.image) || "/queen-logo.png"}
                     alt={i.item.name}
                     className="w-full h-full object-cover"
                     loading="lazy"
