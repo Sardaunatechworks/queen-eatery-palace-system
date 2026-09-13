@@ -254,7 +254,9 @@ export interface Order {
 export interface RestaurantTable {
   id: number;
   table_number: string;
-  qr_code_token: string;
+  qr_code_token?: string;
+  public_token?: string;
+  name?: string | null;
   label?: string | null;
   capacity: number;
   is_active: boolean | number;

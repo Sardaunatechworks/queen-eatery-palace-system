@@ -56,8 +56,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         setUser(null);
       }
-    } catch {
-      // If access cookie expired, attempt silent refresh
+    } catch (err: any) {
+      // If throttled by rate limiter, retain current state and do not trigger refresh storm
+      if (err?.status === 429) {
+        return;
+      }
+
+      // If access cookie expired (401), attempt silent refresh
       try {
         const refreshRes = await apiClient.post<ApiResponse<{ profile: UserProfile }>>('/auth/refresh');
         if (refreshRes.success && refreshRes.data?.profile) {
@@ -65,8 +70,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else {
           setUser(null);
         }
-      } catch {
-        setUser(null);
+      } catch (refreshErr: any) {
+        // Only clear user on actual 401 Unauthorized session expiration
+        if (refreshErr?.status === 401 || err?.status === 401) {
+          setUser(null);
+        }
       }
     } finally {
       setLoading(false);
@@ -89,7 +97,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [verifySession]);
 
-  // Poll account status every 30s to enforce server-side suspensions immediately
+  // Poll account status periodically to enforce server-side suspensions immediately
   useEffect(() => {
     if (!user) return;
 
@@ -104,13 +112,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return fresh;
           });
         }
-      } catch {
-        // If suspended or session revoked, immediately clear frontend auth
-        await signOut();
+      } catch (err: any) {
+        // ONLY sign out if explicitly 401 Unauthorized (session revoked or suspended)
+        // NEVER sign out on 429 (Too Many Requests), 5xx, or temporary network drops
+        if (err?.status === 401) {
+          await signOut();
+        }
       }
     };
 
-    const interval = setInterval(checkStatus, 30000);
+    const interval = setInterval(checkStatus, 60000); // Check every 60s
     return () => clearInterval(interval);
   }, [user, signOut]);
 

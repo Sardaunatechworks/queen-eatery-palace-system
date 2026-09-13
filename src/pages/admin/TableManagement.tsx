@@ -160,7 +160,8 @@ export const TableManagement: React.FC = () => {
     }
   };
 
-  const handleCopyLink = (token: string) => {
+  const handleCopyLink = (token?: string) => {
+    if (!token || token === 'undefined') return;
     const url = `${window.location.origin}/q/${token}`;
     navigator.clipboard.writeText(url);
     setCopiedToken(token);
@@ -305,7 +306,8 @@ export const TableManagement: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {tables.map((table) => {
-                  const isCopied = copiedToken === table.qr_code_token;
+                  const effectiveToken = table.qr_code_token || table.public_token || '';
+                  const isCopied = copiedToken === effectiveToken;
 
                   return (
                     <tr key={table.id} className="hover:bg-gray-50/70 transition-colors">
@@ -326,29 +328,31 @@ export const TableManagement: React.FC = () => {
 
                       {/* Section / Label */}
                       <td className="px-4 py-3.5 text-gray-600 font-medium">
-                        {table.label || <span className="text-gray-300 italic">Main Dining</span>}
+                        {table.label || table.name || <span className="text-gray-300 italic">Main Dining</span>}
                       </td>
 
                       {/* Capacity */}
                       <td className="px-4 py-3.5 text-gray-700">
-                        <span className="font-semibold">{table.capacity}</span> seats
+                        <span className="font-semibold">{table.capacity ?? 4}</span> seats
                       </td>
 
                       {/* QR Public Token */}
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-1.5 font-mono text-[11px] bg-gray-100 px-2 py-1 rounded-lg border border-gray-200 w-fit">
-                          <span className="text-gray-700 font-bold">{table.qr_code_token}</span>
-                          <button
-                            onClick={() => handleCopyLink(table.qr_code_token)}
-                            className="text-gray-400 hover:text-gray-700 transition-colors ml-1"
-                            title="Copy Direct QR Link"
-                          >
-                            {isCopied ? (
-                              <Check className="w-3.5 h-3.5 text-emerald-600" />
-                            ) : (
-                              <Copy className="w-3.5 h-3.5" />
-                            )}
-                          </button>
+                          <span className="text-gray-700 font-bold">{effectiveToken || 'Generating...'}</span>
+                          {effectiveToken && (
+                            <button
+                              onClick={() => handleCopyLink(effectiveToken)}
+                              className="text-gray-400 hover:text-gray-700 transition-colors ml-1"
+                              title="Copy Direct QR Link"
+                            >
+                              {isCopied ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          )}
                         </div>
                       </td>
 
@@ -382,13 +386,15 @@ export const TableManagement: React.FC = () => {
                       {/* Actions */}
                       <td className="px-5 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => window.open(`/q/${table.qr_code_token}`, '_blank')}
-                            className="p-1.5 rounded-lg text-gray-600 hover:text-[#8B1A1A] hover:bg-amber-50 border border-gray-200 transition-colors"
-                            title="Test / Open Guest Menu for this Table"
-                          >
-                            <ExternalLink className="w-4 h-4 text-gray-600" />
-                          </button>
+                          {effectiveToken && (
+                            <button
+                              onClick={() => window.open(`/q/${effectiveToken}`, '_blank')}
+                              className="p-1.5 rounded-lg text-gray-600 hover:text-[#8B1A1A] hover:bg-amber-50 border border-gray-200 transition-colors"
+                              title="Test / Open Guest Menu for this Table"
+                            >
+                              <ExternalLink className="w-4 h-4 text-gray-600" />
+                            </button>
+                          )}
 
                           <button
                             onClick={() => handleOpenQrModal(table)}

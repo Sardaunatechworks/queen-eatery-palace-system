@@ -24,7 +24,9 @@ export const TableQrCardModal: React.FC<TableQrCardModalProps> = ({
 
   // Construct table URL
   const origin = window.location.origin;
-  const tableUrl = `${origin}/q/${table.qr_code_token}`;
+  const effectiveToken = table.qr_code_token || table.public_token || '';
+  const effectiveLabel = table.label || table.name || '';
+  const tableUrl = effectiveToken ? `${origin}/q/${effectiveToken}` : '';
 
   const handlePrint = () => {
     window.print();
@@ -93,9 +95,9 @@ export const TableQrCardModal: React.FC<TableQrCardModalProps> = ({
               <h1 className="font-serif font-black text-2xl tracking-wider text-white uppercase">
                 {table.table_number}
               </h1>
-              {table.label && (
+              {effectiveLabel && (
                 <p className="text-xs text-[#FFEDB3] font-medium mt-0.5">
-                  {table.label}
+                  {effectiveLabel}
                 </p>
               )}
             </div>
@@ -128,7 +130,7 @@ export const TableQrCardModal: React.FC<TableQrCardModalProps> = ({
 
             {/* Token details for staff verification */}
             <div className="pt-3 border-t border-[#3D1E1E] text-[10px] text-[#BFA59A] flex items-center justify-between">
-              <span>Token: <strong className="text-[#D4A017]">{table.qr_code_token}</strong></span>
+              <span>Token: <strong className="text-[#D4A017]">{effectiveToken}</strong></span>
               <span>Dine-In Self-Order</span>
             </div>
           </div>

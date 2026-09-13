@@ -51,7 +51,14 @@ export const GuestMenuPage: React.FC = () => {
 
   // Fetch Menu for Table
   useEffect(() => {
-    if (!tableToken || tableToken.startsWith(':') || tableToken === 'token' || tableToken === 'tableToken') {
+    if (
+      !tableToken ||
+      tableToken === 'undefined' ||
+      tableToken === 'null' ||
+      tableToken.startsWith(':') ||
+      tableToken === 'token' ||
+      tableToken === 'tableToken'
+    ) {
       setError('Please scan a valid table QR code from your table stand, or launch a table link from the Admin Table Management portal.');
       setLoading(false);
       return;

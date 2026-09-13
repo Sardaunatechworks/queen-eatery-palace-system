@@ -238,7 +238,10 @@ async function request<T = any>(
 
         if (!retryResponse.ok) {
           const errData = await retryResponse.json().catch(() => ({}));
-          throw new Error(errData.message || `Request failed with status ${retryResponse.status}`);
+          const retryErr: any = new Error(errData.message || `Request failed with status ${retryResponse.status}`);
+          retryErr.status = retryResponse.status;
+          retryErr.data = errData;
+          throw retryErr;
         }
 
         return (await retryResponse.json()) as T;
@@ -247,7 +250,10 @@ async function request<T = any>(
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(data.message || `Request failed with status ${response.status}`);
+        const err: any = new Error(data.message || `Request failed with status ${response.status}`);
+        err.status = response.status;
+        err.data = data;
+        throw err;
       }
 
       if (isGet && response.ok) {
