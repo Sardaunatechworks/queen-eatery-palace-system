@@ -10,6 +10,7 @@ import type {
   CreateEventHallInquiryData,
   UpdateEventHallInquiryStatusData,
   EventHallStatsData,
+  EventHallAvailabilityResponse,
 } from '../types';
 
 export interface EventHallFilterParams {
@@ -28,6 +29,17 @@ function buildQuery(params?: Record<string, string | number | undefined>): strin
     .filter(([_, v]) => v !== undefined && v !== null && v !== '')
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
   return entries.length > 0 ? `?${entries.join('&')}` : '';
+}
+
+/**
+ * Get real-time event hall slot availability for a date.
+ */
+export async function getEventHallAvailability(
+  date: string
+): Promise<ApiResponse<EventHallAvailabilityResponse>> {
+  return apiClient.get<ApiResponse<EventHallAvailabilityResponse>>(
+    `/event-hall/availability?date=${encodeURIComponent(date)}`
+  );
 }
 
 /**

@@ -14,6 +14,9 @@ import {
   Sparkles,
   Clock,
   ShieldCheck,
+  AlertCircle,
+  Info,
+  Check,
 } from "lucide-react";
 import * as Icons from "lucide-react";
 import { getCMSContent, CMSData } from "../services/cmsService";
@@ -22,8 +25,8 @@ import { apiClient } from "../lib/apiClient";
 import { formatNaira } from "../utils/format";
 import { resolveMediaUrl } from "../utils/media";
 import { MenuItem } from "./admin/MenuManagement";
-import { submitEventHallInquiry } from "../services/eventHallService";
-import type { PaginatedResponse } from "../types";
+import { submitEventHallInquiry, getEventHallAvailability } from "../services/eventHallService";
+import type { PaginatedResponse, EventHallAvailabilityResponse, EventHallAvailabilitySlot } from "../types";
 import queenLogo from "../assets/queen-logo.png";
 import { Input, Select, TextArea } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
@@ -35,7 +38,7 @@ export const Landing: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [featuredMenu, setFeaturedMenu] = useState<MenuItem[]>([]);
 
-  // Booking Modal State
+  // Booking Modal State (no pre-filled dummy data)
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [isSubmittingInquiry, setIsSubmittingInquiry] = useState(false);
   const [inquirySubmitted, setInquirySubmitted] = useState(false);
@@ -44,26 +47,134 @@ export const Landing: React.FC = () => {
     full_name: "",
     phone: "",
     email: "",
-    event_type: "Wedding Reception",
+    event_type: "",
     preferred_date: "",
-    expected_guests: 150,
+    start_time: "",
+    end_time: "",
+    expected_guests: "",
     message: "",
   });
+
+  // Slot availability state
+  const [availability, setAvailability] = useState<EventHallAvailabilityResponse | null>(null);
+  const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
+  const [timeConflictWarning, setTimeConflictWarning] = useState<string | null>(null);
+
+  const timeToSeconds = (timeStr: string): number => {
+    if (!timeStr) return 0;
+    const parts = timeStr.trim().split(":");
+    const h = parseInt(parts[0] || "0", 10);
+    const m = parseInt(parts[1] || "0", 10);
+    return h * 3600 + m * 60;
+  };
+
+  const formatAmPm = (timeStr: string): string => {
+    if (!timeStr) return "";
+    const parts = timeStr.trim().split(":");
+    let h = parseInt(parts[0] || "0", 10);
+    const m = parts[1] || "00";
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12;
+    h = h ? h : 12;
+    return `${h.toString().padStart(2, "0")}:${m} ${ampm}`;
+  };
+
+  const checkCollision = (
+    start: string,
+    end: string,
+    slots?: EventHallAvailabilitySlot[]
+  ): boolean => {
+    if (!start || !end) {
+      setTimeConflictWarning(null);
+      return false;
+    }
+
+    const sSec = timeToSeconds(start);
+    const eSec = timeToSeconds(end);
+
+    if (eSec <= sSec) {
+      setTimeConflictWarning("End time must be later than start time.");
+      return true;
+    }
+
+    const currentSlots = slots || availability?.booked_slots || [];
+    for (const slot of currentSlots) {
+      const bStart = timeToSeconds(slot.start_time);
+      const bEnd = timeToSeconds(slot.end_time);
+
+      if (sSec < bEnd && eSec > bStart) {
+        const slotText = `${formatAmPm(slot.start_time)} - ${formatAmPm(slot.end_time)}`;
+        setTimeConflictWarning(
+          `The window ${formatAmPm(start)} - ${formatAmPm(end)} overlaps with an existing reservation (${slotText}). Please pick an open window.`
+        );
+        return true;
+      }
+    }
+
+    setTimeConflictWarning(null);
+    return false;
+  };
+
+  const handleDateChange = async (date: string) => {
+    setBookingForm((prev) => ({ ...prev, preferred_date: date }));
+    setTimeConflictWarning(null);
+    if (!date) {
+      setAvailability(null);
+      return;
+    }
+
+    setIsLoadingAvailability(true);
+    try {
+      const res = await getEventHallAvailability(date);
+      if (res.success && res.data) {
+        setAvailability(res.data);
+        if (bookingForm.start_time && bookingForm.end_time) {
+          checkCollision(bookingForm.start_time, bookingForm.end_time, res.data.booked_slots);
+        }
+      } else {
+        setAvailability(null);
+      }
+    } catch {
+      setAvailability(null);
+    } finally {
+      setIsLoadingAvailability(false);
+    }
+  };
+
+  const handleTimeChange = (start: string, end: string) => {
+    setBookingForm((prev) => ({ ...prev, start_time: start, end_time: end }));
+    checkCollision(start, end);
+  };
 
   const handleBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setInquiryError("");
+
+    if (!bookingForm.event_type) {
+      setInquiryError("Please select an event category.");
+      return;
+    }
+
+    if (bookingForm.start_time && bookingForm.end_time) {
+      if (checkCollision(bookingForm.start_time, bookingForm.end_time)) {
+        setInquiryError("Selected time slot is already reserved. Please select an available window.");
+        return;
+      }
+    }
+
     setIsSubmittingInquiry(true);
 
     try {
       await submitEventHallInquiry({
-        full_name: bookingForm.full_name,
-        phone: bookingForm.phone,
-        email: bookingForm.email || undefined,
+        full_name: bookingForm.full_name.trim(),
+        phone: bookingForm.phone.trim(),
+        email: bookingForm.email.trim() || undefined,
         event_type: bookingForm.event_type,
         preferred_date: bookingForm.preferred_date,
-        expected_guests: Number(bookingForm.expected_guests) || undefined,
-        message: bookingForm.message || undefined,
+        start_time: bookingForm.start_time || undefined,
+        end_time: bookingForm.end_time || undefined,
+        expected_guests: bookingForm.expected_guests ? Number(bookingForm.expected_guests) : undefined,
+        message: bookingForm.message.trim() || undefined,
       });
 
       setInquirySubmitted(true);
@@ -80,13 +191,17 @@ export const Landing: React.FC = () => {
     setIsBookingModalOpen(false);
     setInquirySubmitted(false);
     setInquiryError("");
+    setTimeConflictWarning(null);
+    setAvailability(null);
     setBookingForm({
       full_name: "",
       phone: "",
       email: "",
-      event_type: "Wedding Reception",
+      event_type: "",
       preferred_date: "",
-      expected_guests: 150,
+      start_time: "",
+      end_time: "",
+      expected_guests: "",
       message: "",
     });
   };
@@ -760,8 +875,9 @@ export const Landing: React.FC = () => {
             ) : (
               <form onSubmit={handleBookingSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
                 {inquiryError && (
-                  <div className="bg-red-50 border border-red-200 p-3 rounded-lg text-xs text-red-700 font-medium">
-                    {inquiryError}
+                  <div className="bg-red-50 border border-red-200 p-3 rounded-lg text-xs text-red-700 font-medium flex items-center gap-2">
+                    <AlertCircle size={15} className="shrink-0 text-red-600" />
+                    <span>{inquiryError}</span>
                   </div>
                 )}
 
@@ -794,14 +910,17 @@ export const Landing: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Select
                     label="Event Category"
+                    required
                     value={bookingForm.event_type}
                     onChange={(e) => setBookingForm({ ...bookingForm, event_type: e.target.value })}
                     options={[
+                      { value: "", label: "Select Event Category..." },
                       { value: "Wedding Reception", label: "Wedding Reception" },
                       { value: "Birthday Party", label: "Birthday Party" },
                       { value: "Corporate Meeting", label: "Corporate Meeting" },
                       { value: "Conference / Seminar", label: "Conference / Seminar" },
                       { value: "Dinner & Gala", label: "Dinner & Gala" },
+                      { value: "Anniversary Celebration", label: "Anniversary Celebration" },
                       { value: "Other", label: "Other Occasion" },
                     ]}
                   />
@@ -812,20 +931,161 @@ export const Landing: React.FC = () => {
                     required
                     min={new Date().toISOString().split("T")[0]}
                     value={bookingForm.preferred_date}
-                    onChange={(e) =>
-                      setBookingForm({ ...bookingForm, preferred_date: e.target.value })
-                    }
+                    onChange={(e) => handleDateChange(e.target.value)}
                   />
+                </div>
+
+                {/* Real-Time Slot Availability Panel */}
+                {bookingForm.preferred_date && (
+                  <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50/80 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-stone-600 flex items-center gap-1.5">
+                        <Clock size={13} className="text-[#8B1E1E]" />
+                        Venue Schedule for {bookingForm.preferred_date}
+                      </span>
+                      {isLoadingAvailability && (
+                        <span className="text-[10px] text-stone-500 flex items-center gap-1">
+                          <Loader2 size={11} className="animate-spin text-[#8B1E1E]" />
+                          Checking...
+                        </span>
+                      )}
+                    </div>
+
+                    {isLoadingAvailability ? (
+                      <div className="py-2 text-center text-xs text-stone-400">
+                        Checking slot availability...
+                      </div>
+                    ) : availability ? (
+                      <div className="space-y-2">
+                        {availability.is_fully_booked ? (
+                          <div className="p-2.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 font-semibold flex items-center gap-2">
+                            <AlertCircle size={14} className="text-red-600 shrink-0" />
+                            <span>This date is fully booked. Please select another date.</span>
+                          </div>
+                        ) : availability.booked_slots.length > 0 ? (
+                          <div className="space-y-1.5">
+                            <div className="text-[11px] text-stone-500 font-medium">
+                              Reserved Slots (Unavailable):
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {availability.booked_slots.map((b, idx) => (
+                                <span
+                                  key={idx}
+                                  className="px-2.5 py-1 rounded-md bg-red-50 border border-red-200 text-red-800 text-[11px] font-semibold flex items-center gap-1"
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+                                  {formatAmPm(b.start_time)} - {formatAmPm(b.end_time)} (Booked)
+                                </span>
+                              ))}
+                            </div>
+
+                            <div className="text-[11px] text-emerald-700 font-medium pt-1">
+                              Available Open Windows:
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {availability.available_windows.map((w, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={() => handleTimeChange(w.start_time, w.end_time)}
+                                  className="px-2.5 py-1 rounded-md bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-900 text-[11px] font-semibold transition-colors flex items-center gap-1"
+                                  title="Click to select this free window"
+                                >
+                                  <Check size={11} className="text-emerald-600" />
+                                  {formatAmPm(w.start_time)} - {formatAmPm(w.end_time)}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-2 rounded-lg bg-emerald-50/80 border border-emerald-200 text-xs text-emerald-800 font-medium flex items-center gap-1.5">
+                            <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                            <span>All hours are open for booking on this date (08:00 AM – 11:00 PM).</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
+                {/* Time Selection */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-stone-700 block">
+                      Reservation Time Window
+                    </label>
+                    <span className="text-[10px] text-stone-400">Operating hours: 08:00 AM – 11:00 PM</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] text-stone-500 block mb-1">Start Time</label>
+                      <input
+                        type="time"
+                        min="08:00"
+                        max="22:00"
+                        value={bookingForm.start_time}
+                        onChange={(e) => handleTimeChange(e.target.value, bookingForm.end_time)}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-stone-200 bg-white text-stone-800 focus:ring-2 focus:ring-[#8B1E1E]/20 focus:border-[#8B1E1E] transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-stone-500 block mb-1">End Time</label>
+                      <input
+                        type="time"
+                        min={bookingForm.start_time || "09:00"}
+                        max="23:00"
+                        value={bookingForm.end_time}
+                        onChange={(e) => handleTimeChange(bookingForm.start_time, e.target.value)}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-stone-200 bg-white text-stone-800 focus:ring-2 focus:ring-[#8B1E1E]/20 focus:border-[#8B1E1E] transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick Slot Preset Buttons */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider mr-1">
+                      Presets:
+                    </span>
+                    {[
+                      { label: "Morning (09:00 - 13:00)", start: "09:00", end: "13:00" },
+                      { label: "Afternoon (14:00 - 18:00)", start: "14:00", end: "18:00" },
+                      { label: "Evening (18:00 - 22:00)", start: "18:00", end: "22:00" },
+                      { label: "Full Day (09:00 - 21:00)", start: "09:00", end: "21:00" },
+                    ].map((p, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleTimeChange(p.start, p.end)}
+                        className={`text-[10px] px-2 py-1 rounded-md border transition-colors ${
+                          bookingForm.start_time === p.start && bookingForm.end_time === p.end
+                            ? "bg-[#8B1E1E] text-white border-[#8B1E1E] font-semibold"
+                            : "bg-white text-stone-600 border-stone-200 hover:border-stone-300 hover:bg-stone-50"
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Time Conflict Alert */}
+                  {timeConflictWarning && (
+                    <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 font-medium flex items-start gap-2 animate-in fade-in duration-200">
+                      <AlertCircle size={15} className="text-amber-600 shrink-0 mt-0.5" />
+                      <span>{timeConflictWarning}</span>
+                    </div>
+                  )}
                 </div>
 
                 <Input
                   label="Estimated Guest Count"
                   type="number"
-                  min="10"
+                  min="1"
                   max="2000"
+                  placeholder="e.g. 250"
                   value={bookingForm.expected_guests}
                   onChange={(e) =>
-                    setBookingForm({ ...bookingForm, expected_guests: Number(e.target.value) })
+                    setBookingForm({ ...bookingForm, expected_guests: e.target.value })
                   }
                 />
 
@@ -846,6 +1106,11 @@ export const Landing: React.FC = () => {
                     variant="primary"
                     size="md"
                     loading={isSubmittingInquiry}
+                    disabled={
+                      isSubmittingInquiry ||
+                      Boolean(timeConflictWarning) ||
+                      (availability?.is_fully_booked ?? false)
+                    }
                   >
                     Submit Booking Request
                   </Button>

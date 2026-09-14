@@ -471,6 +471,8 @@ export interface EventHallInquiry {
   email: string | null;
   event_type: string;
   preferred_date: string;
+  start_time: string | null;
+  end_time: string | null;
   expected_guests: number | null;
   message: string | null;
   status: 'new' | 'contacted' | 'confirmed' | 'declined' | 'completed';
@@ -487,6 +489,8 @@ export interface CreateEventHallInquiryData {
   email?: string;
   event_type: string;
   preferred_date: string;
+  start_time?: string;
+  end_time?: string;
   expected_guests?: number;
   message?: string;
 }
@@ -503,6 +507,30 @@ export interface EventHallStatsData {
   confirmed: number;
   declined: number;
   completed: number;
+}
+
+export interface EventHallAvailabilitySlot {
+  id: number;
+  start_time: string;
+  end_time: string;
+  status: string;
+  is_full_day: boolean;
+}
+
+export interface EventHallTimeWindow {
+  start_time: string;
+  end_time: string;
+}
+
+export interface EventHallAvailabilityResponse {
+  date: string;
+  operating_hours: {
+    open: string;
+    close: string;
+  };
+  booked_slots: EventHallAvailabilitySlot[];
+  available_windows: EventHallTimeWindow[];
+  is_fully_booked: boolean;
 }
 
 // ============================================

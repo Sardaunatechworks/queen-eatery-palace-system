@@ -7,9 +7,11 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  AlertTriangle,
   Trash2,
   Edit3,
   MessageSquare,
+  Plus,
   X,
 } from "lucide-react";
 import {
@@ -17,12 +19,19 @@ import {
   getEventHallStats,
   updateEventHallInquiryStatus,
   deleteEventHallInquiry,
+  submitEventHallInquiry,
+  getEventHallAvailability,
 } from "../../services/eventHallService";
-import type { EventHallInquiry, EventHallStatsData } from "../../types";
+import type {
+  EventHallInquiry,
+  EventHallStatsData,
+  CreateEventHallInquiryData,
+  EventHallAvailabilityResponse,
+} from "../../types";
 import { useUI } from "../../context/UIContext";
 import { formatDistanceToNow, format } from "date-fns";
 import { PageHeader, StatCard, Badge, ActionDropdown, ActionItem } from "../../components/ui";
-import { SearchInput, TextArea } from "../../components/ui/Input";
+import { SearchInput, TextArea, Input, Select } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
 
 const STATUS_CONFIG: Record<
@@ -35,6 +44,15 @@ const STATUS_CONFIG: Record<
   declined: { label: "Declined", variant: "error" },
   completed: { label: "Completed", variant: "neutral" },
 };
+
+const EVENT_TYPE_OPTIONS = [
+  { value: "Wedding Reception", label: "Wedding Reception" },
+  { value: "Birthday Celebration", label: "Birthday Celebration" },
+  { value: "Corporate Seminar", label: "Corporate Seminar / Conference" },
+  { value: "Banquet Dinner", label: "Banquet / Gala Dinner" },
+  { value: "Anniversary Party", label: "Anniversary / Reunion" },
+  { value: "Other Special Event", label: "Other Special Event" },
+];
 
 export const EventHallManagement: React.FC = () => {
   const [inquiries, setInquiries] = useState<EventHallInquiry[]>([]);
@@ -57,6 +75,24 @@ export const EventHallManagement: React.FC = () => {
   const [editStatus, setEditStatus] = useState<string>("new");
   const [adminNotes, setAdminNotes] = useState<string>("");
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // New reservation modal state
+  const [isNewModalOpen, setIsNewModalOpen] = useState(false);
+  const [newForm, setNewForm] = useState<CreateEventHallInquiryData>({
+    name: "",
+    email: "",
+    phone: "",
+    event_type: "",
+    expected_guests: undefined,
+    preferred_date: "",
+    start_time: "",
+    end_time: "",
+    message: "",
+  });
+  const [newFormErrors, setNewFormErrors] = useState<Record<string, string>>({});
+  const [availability, setAvailability] = useState<EventHallAvailabilityResponse | null>(null);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const [isCreatingReservation, setIsCreatingReservation] = useState(false);
 
   const { showToast } = useUI();
 
@@ -128,6 +164,110 @@ export const EventHallManagement: React.FC = () => {
     }
   };
 
+  // Real-time slot availability check for new reservation modal
+  useEffect(() => {
+    if (!newForm.preferred_date) {
+      setAvailability(null);
+      return;
+    }
+    let isMounted = true;
+    setLoadingAvailability(true);
+    getEventHallAvailability(newForm.preferred_date)
+      .then((res) => {
+        if (isMounted && res.success && res.data) {
+          setAvailability(res.data);
+        }
+      })
+      .catch(() => {
+        if (isMounted) setAvailability(null);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingAvailability(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [newForm.preferred_date]);
+
+  const checkTimeConflict = (startTime?: string, endTime?: string): boolean => {
+    if (!startTime || !endTime || !availability?.booked_slots?.length) return false;
+    const toMinutes = (t: string) => {
+      const [h, m] = t.split(":").map(Number);
+      return h * 60 + (m || 0);
+    };
+    const reqStart = toMinutes(startTime);
+    const reqEnd = toMinutes(endTime);
+    if (reqStart >= reqEnd) return false;
+
+    return availability.booked_slots.some((slot) => {
+      const slotStart = toMinutes(slot.start_time);
+      const slotEnd = toMinutes(slot.end_time);
+      return reqStart < slotEnd && reqEnd > slotStart;
+    });
+  };
+
+  const hasNewConflict = checkTimeConflict(newForm.start_time, newForm.end_time);
+
+  const handleOpenNewModal = () => {
+    setNewForm({
+      name: "",
+      email: "",
+      phone: "",
+      event_type: "",
+      expected_guests: undefined,
+      preferred_date: "",
+      start_time: "",
+      end_time: "",
+      message: "",
+    });
+    setNewFormErrors({});
+    setAvailability(null);
+    setIsNewModalOpen(true);
+  };
+
+  const handleCreateReservation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const errors: Record<string, string> = {};
+    if (!newForm.name.trim()) errors.name = "Customer name is required";
+    if (!newForm.phone.trim()) errors.phone = "Phone number is required";
+    if (!newForm.event_type) errors.event_type = "Please select event category";
+    if (!newForm.preferred_date) errors.preferred_date = "Reservation date is required";
+
+    if (newForm.start_time && newForm.end_time) {
+      if (newForm.start_time >= newForm.end_time) {
+        errors.end_time = "End time must be after start time";
+      } else if (hasNewConflict) {
+        errors.start_time = "Selected time interval overlaps with an existing booking";
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setNewFormErrors(errors);
+      return;
+    }
+
+    setIsCreatingReservation(true);
+    try {
+      const res = await submitEventHallInquiry({
+        ...newForm,
+        expected_guests: newForm.expected_guests ? Number(newForm.expected_guests) : undefined,
+      });
+
+      if (res.success) {
+        showToast("Event hall reservation created successfully", "success");
+        setIsNewModalOpen(false);
+        loadData();
+      } else {
+        showToast(res.message || "Failed to create reservation", "error");
+      }
+    } catch (err: any) {
+      showToast(err.response?.data?.message || "Failed to create reservation", "error");
+    } finally {
+      setIsCreatingReservation(false);
+    }
+  };
+
   const getWhatsAppLink = (phone: string, name: string, eventType: string) => {
     const cleanPhone = phone.replace(/[^0-9]/g, "");
     const formattedPhone = cleanPhone.startsWith("0") ? "234" + cleanPhone.slice(1) : cleanPhone;
@@ -143,6 +283,16 @@ export const EventHallManagement: React.FC = () => {
       <PageHeader
         title="Event Hall Bookings"
         description="Review customer booking inquiries, manage event reservation statuses, and coordinate client communication."
+        actions={
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<Plus size={14} />}
+            onClick={handleOpenNewModal}
+          >
+            New Reservation
+          </Button>
+        }
       />
 
       {/* KPI Stats */}
@@ -258,9 +408,15 @@ export const EventHallManagement: React.FC = () => {
                     <Badge size="sm" variant={statusConfig.variant}>
                       {statusConfig.label}
                     </Badge>
-                    <span className="text-xs font-medium text-stone-500 bg-stone-100 px-2 py-0.5 rounded">
-                      {inq.event_type}
+                    <span className="text-xs font-medium text-stone-500 bg-stone-100 px-2 py-0.5 rounded capitalize">
+                      {inq.event_type.replace(/_/g, " ")}
                     </span>
+                    {inq.start_time && inq.end_time && (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded">
+                        <Clock size={12} className="text-amber-600" />
+                        {inq.start_time.slice(0, 5)} - {inq.end_time.slice(0, 5)}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -298,7 +454,7 @@ export const EventHallManagement: React.FC = () => {
                 </div>
 
                 {/* Details Bar */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-stone-100 text-xs text-stone-600">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t border-stone-100 text-xs text-stone-600">
                   <div className="flex items-center gap-1.5">
                     <Calendar size={14} className="text-stone-400 shrink-0" />
                     <span>
@@ -307,6 +463,18 @@ export const EventHallManagement: React.FC = () => {
                         {isNaN(dateObj.getTime())
                           ? inq.preferred_date
                           : format(dateObj, "EEE, dd MMM yyyy")}
+                      </strong>
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <Clock size={14} className="text-stone-400 shrink-0" />
+                    <span>
+                      Time:{" "}
+                      <strong className="text-stone-800">
+                        {inq.start_time && inq.end_time
+                          ? `${inq.start_time.slice(0, 5)} - ${inq.end_time.slice(0, 5)}`
+                          : "Flexible / Full Day"}
                       </strong>
                     </span>
                   </div>
@@ -423,6 +591,250 @@ export const EventHallManagement: React.FC = () => {
                 Save Status
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Reservation Modal */}
+      {isNewModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl border border-stone-200 w-full max-w-2xl my-8 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-5 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
+              <div>
+                <h3 className="text-base font-semibold text-stone-900">
+                  New Event Hall Reservation
+                </h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Directly record a booking inquiry or walk-in reservation with real-time slot checking.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsNewModalOpen(false)}
+                className="p-1 rounded-md text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateReservation}>
+              <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input
+                    label="Customer / Organizer Full Name *"
+                    placeholder="e.g. Alh. Ibrahim Babangida"
+                    value={newForm.name}
+                    onChange={(e) => {
+                      setNewForm((prev) => ({ ...prev, name: e.target.value }));
+                      if (newFormErrors.name) setNewFormErrors((prev) => ({ ...prev, name: "" }));
+                    }}
+                    error={newFormErrors.name}
+                  />
+
+                  <Input
+                    label="Phone Number *"
+                    placeholder="e.g. 08012345678"
+                    value={newForm.phone}
+                    onChange={(e) => {
+                      setNewForm((prev) => ({ ...prev, phone: e.target.value }));
+                      if (newFormErrors.phone) setNewFormErrors((prev) => ({ ...prev, phone: "" }));
+                    }}
+                    error={newFormErrors.phone}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input
+                    label="Email Address (Optional)"
+                    type="email"
+                    placeholder="e.g. client@example.com"
+                    value={newForm.email}
+                    onChange={(e) => setNewForm((prev) => ({ ...prev, email: e.target.value }))}
+                  />
+
+                  <Select
+                    label="Event Category *"
+                    value={newForm.event_type}
+                    onChange={(e) => {
+                      setNewForm((prev) => ({ ...prev, event_type: e.target.value }));
+                      if (newFormErrors.event_type)
+                        setNewFormErrors((prev) => ({ ...prev, event_type: "" }));
+                    }}
+                    placeholder="Select event category..."
+                    options={EVENT_TYPE_OPTIONS}
+                    error={newFormErrors.event_type}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input
+                    label="Expected Guest Count"
+                    type="number"
+                    min={1}
+                    placeholder="e.g. 250"
+                    value={newForm.expected_guests ?? ""}
+                    onChange={(e) =>
+                      setNewForm((prev) => ({
+                        ...prev,
+                        expected_guests: e.target.value ? Number(e.target.value) : undefined,
+                      }))
+                    }
+                  />
+
+                  <Input
+                    label="Preferred Date *"
+                    type="date"
+                    min={new Date().toISOString().split("T")[0]}
+                    value={newForm.preferred_date}
+                    onChange={(e) => {
+                      setNewForm((prev) => ({ ...prev, preferred_date: e.target.value }));
+                      if (newFormErrors.preferred_date)
+                        setNewFormErrors((prev) => ({ ...prev, preferred_date: "" }));
+                    }}
+                    error={newFormErrors.preferred_date}
+                  />
+                </div>
+
+                {/* Real-Time Slot Availability Feedback */}
+                {newForm.preferred_date && (
+                  <div className="bg-stone-50 rounded-xl p-4 border border-stone-200 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-stone-700 flex items-center gap-1.5">
+                        <Clock size={14} className="text-[#8B1E1E]" />
+                        Venue Schedule for {newForm.preferred_date}
+                      </span>
+                      {loadingAvailability ? (
+                        <span className="text-stone-400 animate-pulse">Checking slots...</span>
+                      ) : availability?.booked_slots && availability.booked_slots.length > 0 ? (
+                        <span className="font-medium text-amber-700 bg-amber-100/70 px-2 py-0.5 rounded text-[11px]">
+                          {availability.booked_slots.length} Booked Window{availability.booked_slots.length > 1 ? "s" : ""}
+                        </span>
+                      ) : (
+                        <span className="font-medium text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded text-[11px]">
+                          All Slots Open (08:00 - 23:00)
+                        </span>
+                      )}
+                    </div>
+
+                    {availability?.booked_slots && availability.booked_slots.length > 0 ? (
+                      <div className="space-y-1.5 pt-1">
+                        <div className="text-[11px] text-stone-500 font-medium">
+                          Reserved / Occupied Time Windows:
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {availability.booked_slots.map((slot, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-md bg-red-50 text-red-700 border border-red-200 font-medium"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                              {slot.start_time.slice(0, 5)} - {slot.end_time.slice(0, 5)}
+                              <span className="text-[10px] text-red-500 capitalize">
+                                ({slot.event_type.replace(/_/g, " ")})
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
+                {/* Time Selection with quick presets */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-stone-700">
+                      Select Event Hours (Operating: 08:00 - 23:00)
+                    </label>
+                    <div className="flex items-center gap-1 text-[11px]">
+                      <span className="text-stone-400">Presets:</span>
+                      {[
+                        { label: "Morning", s: "09:00", e: "13:00" },
+                        { label: "Afternoon", s: "14:00", e: "18:00" },
+                        { label: "Evening", s: "18:00", e: "22:00" },
+                        { label: "All Day", s: "09:00", e: "22:00" },
+                      ].map((preset) => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => {
+                            setNewForm((prev) => ({
+                              ...prev,
+                              start_time: preset.s,
+                              end_time: preset.e,
+                            }));
+                          }}
+                          className="px-1.5 py-0.5 text-[10px] font-medium bg-stone-100 hover:bg-stone-200 text-stone-700 rounded transition-colors"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Input
+                      label="Start Time"
+                      type="time"
+                      value={newForm.start_time}
+                      onChange={(e) =>
+                        setNewForm((prev) => ({ ...prev, start_time: e.target.value }))
+                      }
+                      error={newFormErrors.start_time}
+                    />
+
+                    <Input
+                      label="End Time"
+                      type="time"
+                      value={newForm.end_time}
+                      onChange={(e) =>
+                        setNewForm((prev) => ({ ...prev, end_time: e.target.value }))
+                      }
+                      error={newFormErrors.end_time}
+                    />
+                  </div>
+                </div>
+
+                {/* Conflict Warning Banner */}
+                {hasNewConflict && (
+                  <div className="flex items-start gap-2.5 p-3 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs">
+                    <AlertTriangle size={16} className="text-red-600 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="block font-semibold">Slot Collision Detected</strong>
+                      The requested window ({newForm.start_time} - {newForm.end_time}) overlaps with an existing reservation on this date. Please pick an alternative unoccupied time slot.
+                    </div>
+                  </div>
+                )}
+
+                <TextArea
+                  label="Inquiry / Event Notes (Optional)"
+                  rows={2}
+                  value={newForm.message}
+                  onChange={(e) => setNewForm((prev) => ({ ...prev, message: e.target.value }))}
+                  placeholder="e.g. Special hall decoration, projector setup, or catering requirements..."
+                />
+              </div>
+
+              <div className="p-4 bg-stone-50 border-t border-stone-200 flex justify-end gap-2.5">
+                <Button
+                  variant="outline"
+                  size="md"
+                  type="button"
+                  onClick={() => setIsNewModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  size="md"
+                  type="submit"
+                  disabled={hasNewConflict || isCreatingReservation}
+                  loading={isCreatingReservation}
+                >
+                  Confirm Reservation
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}
