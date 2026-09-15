@@ -397,26 +397,45 @@
 }
 
 /* ============================================
- * PRINT STYLES (Receipt)
+ * PRINT STYLES
+ * Safety-net isolation: the primary print path uses a dedicated popup
+ * window (see ReceiptModal.tsx → handlePrint). These rules ensure that
+ * if window.print() is ever called on the main window, ONLY a designated
+ * #print-receipt container appears — nothing else.
  * ============================================ */
 @media print {
   @page {
-    margin: 0;
     size: 80mm auto;
+    margin: 2mm 3mm;
+  }
+
+  /* ── Hide EVERYTHING in the main-window DOM by default ── */
+  body > *:not(#print-receipt-root) {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* If a dedicated print root exists, show only that */
+  #print-receipt-root,
+  #print-receipt-root * {
+    visibility: visible !important;
+    display: revert !important;
+  }
+
+  /* Hide all Tailwind-marked no-print elements */
+  .no-print,
+  [data-no-print] {
+    display: none !important;
   }
 
   body {
     font-family: 'Courier New', Courier, monospace;
-    font-size: 12px;
-    background: white;
-    color: black;
-  }
-
-  .no-print {
-    display: none !important;
-  }
-
-  .print-only {
-    display: block !important;
+    font-size: 11px;
+    background: white !important;
+    color: black !important;
+    width: 74mm;
+    margin: 0;
+    padding: 0;
   }
 }
+

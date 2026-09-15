@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -187,12 +187,324 @@ ${order.deliveryType === 'delivery' && order.address ? `📍 *Delivery Address:*
     }
   };
 
-  // Direct Browser/Thermal Print
-  const handlePrint = () => {
+  // ─── Thermal Print via dedicated popup window ────────────────────────────
+  // This is the ONLY correct approach for thermal receipts in a React SPA.
+  // window.print() on the main window prints the ENTIRE app DOM (sidebar,
+  // navbar, POS terminal etc.). A dedicated popup window contains ONLY the
+  // receipt document, giving fully deterministic output on every printer.
+  const isPrinting = useRef(false);
+
+  const generateThermalPrintHtml = useCallback((): string => {
+    const packagingLine =
+      packagingFee > 0 && packagingQty > 0
+        ? `<tr>
+            <td>Takeaway Packs (${packagingQty}x @ ${formatNaira(packagingFee / packagingQty)}):</td>
+            <td class="amount">${formatNaira(packagingFee)}</td>
+           </tr>`
+        : '';
+
+    const deliveryLine =
+      order.delivery_fee && Number(order.delivery_fee) > 0
+        ? `<tr>
+            <td>Delivery Fee:</td>
+            <td class="amount">${formatNaira(Number(order.delivery_fee))}</td>
+           </tr>`
+        : '';
+
+    const discountLine =
+      order.discount && Number(order.discount) > 0
+        ? `<tr>
+            <td>Discount:</td>
+            <td class="amount">-${formatNaira(Number(order.discount))}</td>
+           </tr>`
+        : '';
+
+    const tableInfo =
+      order.tableNumber || order.table_number
+        ? `<div class="table-banner">TABLE ${String(order.tableNumber ?? order.table_number).padStart(2, '0')}</div>`
+        : '';
+
+    const guestInfo =
+      order.customerName || order.customer_name
+        ? `<p><strong>Guest:</strong> ${order.customerName ?? order.customer_name}</p>`
+        : '';
+
+    const deliveryAddress =
+      order.deliveryType === 'delivery' && order.address
+        ? `<div class="section">
+            <p class="label">DELIVERY ADDRESS:</p>
+            <p class="wrap">${order.address}</p>
+           </div>`
+        : '';
+
+    const orderType = order.tableNumber || order.table_number
+      ? 'Dine-In (QR Order)'
+      : order.deliveryType === 'delivery'
+        ? 'Delivery'
+        : 'Pickup / Counter Sale';
+
+    const itemRows = (order.items ?? []).map((item: any) => {
+      const unitPrice = Number(item.price ?? 0);
+      const qty = Number(item.quantity ?? 1);
+      const lineTotal = unitPrice * qty;
+      return `<tr>
+        <td class="item-name">${item.name ?? 'Order Item'}</td>
+        <td class="item-qty">${qty}&nbsp;&times;&nbsp;${formatNaira(unitPrice)}</td>
+        <td class="amount">${formatNaira(lineTotal)}</td>
+      </tr>`;
+    }).join('');
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=80mm">
+  <title>Queen's Palace Receipt #${orderRef}</title>
+  <style>
+    @page {
+      size: 80mm auto;
+      margin: 2mm 3mm;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    html, body {
+      width: 74mm;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 11px;
+      line-height: 1.35;
+      color: #000;
+      background: #fff;
+    }
+    .receipt {
+      width: 74mm;
+      padding: 2mm 0;
+    }
+    .center { text-align: center; }
+    .right  { text-align: right; }
+    .bold   { font-weight: bold; }
+    .label  { font-weight: bold; text-transform: uppercase; font-size: 9px; letter-spacing: 0.04em; }
+    .wrap   { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+    .dashed { border-top: 1px dashed #000; margin: 3mm 0; }
+    .section { margin: 2mm 0; }
+
+    /* Restaurant header */
+    .header { text-align: center; margin-bottom: 3mm; }
+    .header h1 { font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.06em; }
+    .header h2 { font-size: 10px; font-weight: bold; text-transform: uppercase; }
+    .header p  { font-size: 9px; }
+
+    /* Table banner for QR dine-in */
+    .table-banner {
+      font-size: 20px;
+      font-weight: bold;
+      text-align: center;
+      border: 2px solid #000;
+      padding: 2mm;
+      margin: 3mm 0;
+      letter-spacing: 0.1em;
+    }
+
+    /* Meta rows */
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      margin: 1mm 0;
+    }
+
+    /* Items table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 2mm 0;
+    }
+    thead th {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 1px dashed #000;
+      padding-bottom: 1mm;
+    }
+    thead th.amount { text-align: right; }
+    tbody tr { page-break-inside: avoid; }
+    tbody td {
+      vertical-align: top;
+      padding: 1mm 0;
+      font-size: 10px;
+    }
+    .item-name {
+      /* Allows long names to wrap naturally */
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      max-width: 40mm;
+    }
+    .item-qty {
+      white-space: nowrap;
+      padding: 0 2mm;
+      font-size: 9px;
+    }
+    .amount {
+      text-align: right;
+      white-space: nowrap;
+      font-weight: bold;
+    }
+
+    /* Totals */
+    .totals-table td { padding: 0.8mm 0; font-size: 10px; }
+    .grand-total td  { font-size: 12px; font-weight: bold; border-top: 1px dashed #000; padding-top: 2mm; }
+
+    /* Footer */
+    .footer { text-align: center; font-size: 9px; margin-top: 3mm; }
+    .footer p { margin: 0.5mm 0; }
+    .footer .tagline { font-style: italic; }
+  </style>
+</head>
+<body>
+<div class="receipt">
+
+  <div class="header">
+    <h1>QUEEN'S PALACE</h1>
+    <h2>EATERY &amp; EVENT HALL</h2>
+    <p>Behind Dutse Emir's House, Opp. Glo Office, Dutse</p>
+    <p>0915 529 0102 &nbsp;|&nbsp; WhatsApp: +234 813 554 9195</p>
+  </div>
+
+  ${tableInfo}
+
+  <div class="dashed"></div>
+
+  <div class="section">
+    <div class="meta-row"><span class="label">Order Ref:</span><span><strong>#${orderRef}</strong></span></div>
+    <div class="meta-row"><span class="label">Type:</span><span>${orderType}</span></div>
+    <div class="meta-row"><span class="label">Date:</span><span>${formattedDate}</span></div>
+    <div class="meta-row"><span class="label">Staff:</span><span>${staffName}</span></div>
+    <div class="meta-row"><span class="label">Payment:</span><span>${paymentMode.toUpperCase()}</span></div>
+    ${guestInfo ? `<div class="meta-row">${guestInfo}</div>` : ''}
+  </div>
+
+  <div class="dashed"></div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th>Qty&times;Price</th>
+        <th class="amount">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${itemRows}
+    </tbody>
+  </table>
+
+  <div class="dashed"></div>
+
+  <table class="totals-table">
+    <tbody>
+      <tr>
+        <td>Food Subtotal:</td>
+        <td class="amount">${formatNaira(foodSubtotal)}</td>
+      </tr>
+      ${packagingLine}
+      ${deliveryLine}
+      ${discountLine}
+    </tbody>
+  </table>
+
+  <table>
+    <tbody class="grand-total">
+      <tr>
+        <td class="bold">TOTAL PAID:</td>
+        <td class="amount bold">${formatNaira(grandTotal)}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  ${deliveryAddress}
+
+  <div class="dashed"></div>
+
+  <div class="footer">
+    <p class="bold">Thank you for your patronage.</p>
+    <p class="tagline">Royal Taste, Splendid Hospitality</p>
+    <p style="margin-top:2mm; font-size:8px;">*** OFFICIAL RECEIPT ***</p>
+  </div>
+
+</div>
+</body>
+</html>`;
+  }, [
+    orderRef, formattedDate, staffName, paymentMode,
+    foodSubtotal, packagingFee, packagingQty, grandTotal,
+    order,
+  ]);
+
+  const handlePrint = useCallback(() => {
+    // Guard: prevent double-click / concurrent prints
+    if (isPrinting.current) return;
+    isPrinting.current = true;
+
     setSaveMenuOpen(false);
     setShareMenuOpen(false);
-    window.print();
-  };
+
+    try {
+      const printHtml = generateThermalPrintHtml();
+
+      // Open a blank popup window — the receipt DOM lives entirely in this
+      // new window, completely isolated from the React app DOM.
+      const printWin = window.open('', '_blank', 'width=400,height=600,scrollbars=yes');
+      if (!printWin) {
+        // Popup was blocked — fall back to alert
+        alert('Popup blocked. Please allow popups for this site to print receipts.');
+        isPrinting.current = false;
+        return;
+      }
+
+      printWin.document.open();
+      printWin.document.write(printHtml);
+      printWin.document.close();
+
+      // Wait for images / fonts to load before printing
+      printWin.onload = () => {
+        try {
+          printWin.focus();
+          printWin.print();
+        } finally {
+          // Close popup after print dialog dismisses (afterprint fires in modern browsers)
+          printWin.addEventListener('afterprint', () => printWin.close());
+          // Safety fallback: close after 60 s if afterprint never fires
+          setTimeout(() => {
+            try { printWin.close(); } catch (_) { /* already closed */ }
+          }, 60_000);
+        }
+        isPrinting.current = false;
+      };
+
+      // If onload doesn't fire (some browsers skip it for document.write)
+      // use a small timeout to trigger print
+      setTimeout(() => {
+        if (!printWin.closed) {
+          try {
+            printWin.focus();
+            printWin.print();
+          } catch (_) { /* ignore */ }
+          printWin.addEventListener('afterprint', () => printWin.close());
+          setTimeout(() => {
+            try { printWin.close(); } catch (_) { /* already closed */ }
+          }, 60_000);
+        }
+        isPrinting.current = false;
+      }, 600);
+
+    } catch (err) {
+      console.error('Print failed:', err);
+      isPrinting.current = false;
+    }
+  }, [generateThermalPrintHtml]);
 
   // 1-Click WhatsApp Share
   const handleShareWhatsApp = () => {
