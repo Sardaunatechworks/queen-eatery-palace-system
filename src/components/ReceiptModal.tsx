@@ -263,56 +263,66 @@ ${order.deliveryType === 'delivery' && order.address ? `📍 *Delivery Address:*
   <style>
     @page {
       size: 80mm auto;
-      margin: 2mm 3mm;
+      margin: 1.5mm 2mm;
     }
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
+      color: #000000 !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
     }
     html, body {
-      width: 74mm;
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 11px;
+      width: 72mm;
+      max-width: 72mm;
+      margin: 0 auto;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Courier New', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
       line-height: 1.35;
-      color: #000;
-      background: #fff;
+      color: #000000 !important;
+      background: #ffffff !important;
+      -webkit-text-stroke: 0.25px #000000;
+      text-rendering: geometricPrecision;
+      -webkit-font-smoothing: antialiased;
     }
     .receipt {
-      width: 74mm;
-      padding: 2mm 0;
+      width: 72mm;
+      padding: 1.5mm 0;
     }
     .center { text-align: center; }
     .right  { text-align: right; }
-    .bold   { font-weight: bold; }
-    .label  { font-weight: bold; text-transform: uppercase; font-size: 9px; letter-spacing: 0.04em; }
+    .bold   { font-weight: 800; }
+    .label  { font-weight: 800; text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.02em; }
     .wrap   { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
-    .dashed { border-top: 1px dashed #000; margin: 3mm 0; }
+    .dashed { border-top: 1.5px dashed #000000; margin: 2.5mm 0; }
     .section { margin: 2mm 0; }
 
-    /* Restaurant header */
-    .header { text-align: center; margin-bottom: 3mm; }
-    .header h1 { font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.06em; }
-    .header h2 { font-size: 10px; font-weight: bold; text-transform: uppercase; }
-    .header p  { font-size: 9px; }
+    /* Restaurant header - High Impact */
+    .header { text-align: center; margin-bottom: 2.5mm; }
+    .header h1 { font-size: 16px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.8mm; line-height: 1.15; }
+    .header h2 { font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 0.8mm; }
+    .header p  { font-size: 10px; font-weight: 600; line-height: 1.3; }
 
     /* Table banner for QR dine-in */
     .table-banner {
-      font-size: 20px;
-      font-weight: bold;
+      font-size: 22px;
+      font-weight: 900;
       text-align: center;
-      border: 2px solid #000;
+      border: 2.5px solid #000000;
       padding: 2mm;
-      margin: 3mm 0;
-      letter-spacing: 0.1em;
+      margin: 2.5mm 0;
+      letter-spacing: 0.08em;
     }
 
     /* Meta rows */
     .meta-row {
       display: flex;
       justify-content: space-between;
-      font-size: 10px;
-      margin: 1mm 0;
+      font-size: 11px;
+      font-weight: 600;
+      margin: 1.2mm 0;
     }
 
     /* Items table */
@@ -322,45 +332,58 @@ ${order.deliveryType === 'delivery' && order.address ? `📍 *Delivery Address:*
       margin: 2mm 0;
     }
     thead th {
-      font-size: 9px;
+      font-size: 11px;
+      font-weight: 900;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
-      border-bottom: 1px dashed #000;
-      padding-bottom: 1mm;
+      letter-spacing: 0.03em;
+      border-bottom: 1.5px solid #000000;
+      padding-bottom: 1.2mm;
+      text-align: left;
     }
     thead th.amount { text-align: right; }
     tbody tr { page-break-inside: avoid; }
     tbody td {
       vertical-align: top;
-      padding: 1mm 0;
-      font-size: 10px;
+      padding: 1.4mm 0;
+      font-size: 11.5px;
+      font-weight: 600;
     }
     .item-name {
-      /* Allows long names to wrap naturally */
+      font-size: 12px;
+      font-weight: 800;
       white-space: normal;
       overflow-wrap: anywhere;
       word-break: break-word;
-      max-width: 40mm;
+      max-width: 36mm;
     }
     .item-qty {
       white-space: nowrap;
-      padding: 0 2mm;
-      font-size: 9px;
+      padding: 0 1.5mm;
+      font-size: 11px;
+      font-weight: 600;
     }
     .amount {
       text-align: right;
       white-space: nowrap;
-      font-weight: bold;
+      font-weight: 800;
+      font-size: 12px;
     }
 
     /* Totals */
-    .totals-table td { padding: 0.8mm 0; font-size: 10px; }
-    .grand-total td  { font-size: 12px; font-weight: bold; border-top: 1px dashed #000; padding-top: 2mm; }
+    .totals-table td { padding: 1mm 0; font-size: 11.5px; font-weight: 700; }
+    .grand-total td  {
+      font-size: 15px;
+      font-weight: 900;
+      border-top: 2px solid #000000;
+      border-bottom: 2px solid #000000;
+      padding: 2.2mm 0;
+    }
 
     /* Footer */
-    .footer { text-align: center; font-size: 9px; margin-top: 3mm; }
-    .footer p { margin: 0.5mm 0; }
-    .footer .tagline { font-style: italic; }
+    .footer { text-align: center; font-size: 10.5px; font-weight: 600; margin-top: 3mm; }
+    .footer p { margin: 0.8mm 0; }
+    .footer .tagline { font-style: italic; font-weight: 700; }
+    .footer .notice { font-size: 9.5px; font-weight: 900; letter-spacing: 0.06em; margin-top: 2mm; }
   </style>
 </head>
 <body>
@@ -431,7 +454,7 @@ ${order.deliveryType === 'delivery' && order.address ? `📍 *Delivery Address:*
   <div class="footer">
     <p class="bold">Thank you for your patronage.</p>
     <p class="tagline">Royal Taste, Splendid Hospitality</p>
-    <p style="margin-top:2mm; font-size:8px;">*** OFFICIAL RECEIPT ***</p>
+    <p class="notice">*** OFFICIAL RECEIPT ***</p>
   </div>
 
 </div>
@@ -468,37 +491,28 @@ ${order.deliveryType === 'delivery' && order.address ? `📍 *Delivery Address:*
       printWin.document.write(printHtml);
       printWin.document.close();
 
-      // Wait for images / fonts to load before printing
-      printWin.onload = () => {
+      let hasTriggered = false;
+      const triggerPrint = () => {
+        if (hasTriggered) return;
+        hasTriggered = true;
         try {
           printWin.focus();
           printWin.print();
-        } finally {
-          // Close popup after print dialog dismisses (afterprint fires in modern browsers)
-          printWin.addEventListener('afterprint', () => printWin.close());
-          // Safety fallback: close after 60 s if afterprint never fires
-          setTimeout(() => {
-            try { printWin.close(); } catch (_) { /* already closed */ }
-          }, 60_000);
+        } catch (_) {
+          /* ignore */
         }
+        printWin.addEventListener('afterprint', () => {
+          try { printWin.close(); } catch (_) {}
+        });
+        setTimeout(() => {
+          try { printWin.close(); } catch (_) {}
+        }, 60_000);
         isPrinting.current = false;
       };
 
-      // If onload doesn't fire (some browsers skip it for document.write)
-      // use a small timeout to trigger print
-      setTimeout(() => {
-        if (!printWin.closed) {
-          try {
-            printWin.focus();
-            printWin.print();
-          } catch (_) { /* ignore */ }
-          printWin.addEventListener('afterprint', () => printWin.close());
-          setTimeout(() => {
-            try { printWin.close(); } catch (_) { /* already closed */ }
-          }, 60_000);
-        }
-        isPrinting.current = false;
-      }, 600);
+      // Trigger print as soon as ready
+      printWin.onload = triggerPrint;
+      setTimeout(triggerPrint, 400);
 
     } catch (err) {
       console.error('Print failed:', err);
