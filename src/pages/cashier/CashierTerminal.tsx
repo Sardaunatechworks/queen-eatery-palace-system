@@ -40,6 +40,7 @@ import {
 
 export const CashierTerminal: React.FC = () => {
   const { profile } = useAuth();
+  const { setLoading: setGlobalLoading, showToast } = useUI();
   const [activeTab, setActiveTab] = useState<"pos" | "incoming">("pos");
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<{ item: MenuItem; quantity: number }[]>([]);
@@ -82,7 +83,6 @@ export const CashierTerminal: React.FC = () => {
     }
   }, [showToast]);
 
-  const { setLoading: setGlobalLoading, showToast } = useUI();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const categories = ["All", "Meals", "Drinks", "Desserts"];
@@ -102,26 +102,6 @@ export const CashierTerminal: React.FC = () => {
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, []);
-
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-
-      const availableItems = filteredMenu.filter((item) => (item.quantity_available ?? item.stockQuantity ?? 0) > 0);
-
-      if (availableItems.length > 0) {
-        const exactMatch = availableItems.find(
-          (item) => item.name.toLowerCase() === searchTerm.trim().toLowerCase()
-        );
-        const topMatch = exactMatch || availableItems[0];
-
-        addToCart(topMatch);
-        setSearchTerm("");
-      } else if (filteredMenu.length > 0) {
-        showToast("Dishes matching search are sold out!", "error");
-      }
-    }
-  };
 
   // Sync Audio Settings
   useEffect(() => {
@@ -356,6 +336,26 @@ export const CashierTerminal: React.FC = () => {
     },
     [showToast]
   );
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+
+      const availableItems = filteredMenu.filter((item) => (item.quantity_available ?? item.stockQuantity ?? 0) > 0);
+
+      if (availableItems.length > 0) {
+        const exactMatch = availableItems.find(
+          (item) => item.name.toLowerCase() === searchTerm.trim().toLowerCase()
+        );
+        const topMatch = exactMatch || availableItems[0];
+
+        addToCart(topMatch);
+        setSearchTerm("");
+      } else if (filteredMenu.length > 0) {
+        showToast("Dishes matching search are sold out!", "error");
+      }
+    }
+  };
 
   const updateQuantity = (id: string | number, delta: number) => {
     setCart((prev) =>
