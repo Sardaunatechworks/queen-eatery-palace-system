@@ -1,0 +1,176 @@
+[
+  {
+    "id": "1tV8kpdxoolqXf1tLngb",
+    "name": "Shawarma",
+    "price": 3000,
+    "category": "Snacks",
+    "status": "approved",
+    "createdBy": "w8IMEv5NQiR8p9l8mPgg9HDvy6w1",
+    "createdAt": {
+      "_seconds": 1778287274,
+      "_nanoseconds": 696000000
+    },
+    "image": "https://firebasestorage.googleapis.com/v0/b/restaurant-management-sy-afdd2.firebasestorage.app/o/menu%2F1778288635773_WhatsApp_Image_2026-04-12_at_4.55.15_PM_(4).jpeg?alt=media&token=4e5a3c44-de67-4f43-93af-25091895ba7a",
+    "isAvailable": true,
+    "stockQuantity": 1
+  },
+  {
+    "id": "4otNorok9ydNkxWT3e6Y",
+    "name": "Samosa and Spring roll piece",
+    "price": 3500,
+    "image": "https://firebasestorage.googleapis.com/v0/b/restaurant-management-sy-afdd2.firebasestorage.app/o/menu%2F1779024143898_IMG-20260515-WA0038.jpg?alt=media&token=d120fb9d-b136-4ac9-bede-87ca94ac510a",
+    "category": "Snacks",
+    "status": "approved",
+    "createdBy": "w8IMEv5NQiR8p9l8mPgg9HDvy6w1",
+    "createdAt": {
+      "_seconds": 1779024212,
+      "_nanoseconds": 752000000
+    },
+    "isAvailable": true,
+    "stockQuantity": 6
+  },
+  {
+    "id": "6fD9Hc8nEaR6hBs7pE7o",
+    "name": "Mocktail",
+    "price": 1500,
+    "image": "https://firebasestorage.googleapis.com/v0/b/restaurant-management-sy-afdd2.firebasestorage.app/o/menu%2F1778581742615_WhatsApp_Image_2026-05-07_at_2.13.34_PM.jpeg?alt=media&token=8a395683-48dd-4664-919a-84f345f3ed39",
+    "category": "Drinks",
+    "createdBy": "CcQuS4g7mHaG99z8k0Y4hZ866D33",
+    "createdAt": {
+      "_seconds": 1778581754,
+      "_nanoseconds": 834000000
+    },
+    "status": "approved",
+    "isAvailable": true,
+    "stockQuantity": 7
+  },
+  {
+    "id": "NvPXIO3V0lravBn4g4nm",
+    "name": "Griled Fish",
+    "price": 2000,
+    "image": "https://picsum.photos/seed/food/400/300",
+    "category": "Desserts",
+    "createdBy": "1ddsAxQJT0Ncw9CKjcHjTYjUp0O2",
+    "createdAt": {
+      "_seconds": 1778133114,
+      "_nanoseconds": 214000000
+    },
+    "status": "approved",
+    "isAvailable": true,
+    "stockQuantity": 9
+  },
+  {
+    "id": "Qk1w8SoKTIplDUi27RhS",
+    "name": "Coconuts Drinks",
+    "price": 2000,
+    "image": "https://firebasestorage.googleapis.com/v0/b/restaurant-management-sy-afdd2.firebasestorage.app/o/menu%2F1778581803166_WhatsApp_Image_2026-05-07_at_2.13.33_PM.jpeg?alt=media&token=906eb235-31f4-4241-916e-8832d1809060",
+    "category": "Drinks",
+    "createdBy": "CcQuS4g7mHaG99z8k0Y4hZ866D33",
+    "createdAt": {
+      "_seconds": 1778581815,
+      "_nanoseconds": 236000000
+    },
+    "status": "approved",
+    "isAvailable": true,
+    "stockQuantity": 8
+  },
+  {
+    "id": "Vgzf6LUOZ4wtiBQDesVV",
+    "name": "Mongo juice",
+    "price": 1500,
+    "image": "https://firebasestorage.googleapis.com/v0/b/restaurant-management-sy-afdd2.firebasestorage.app/o/menu%2F1779023687627_p.jpg?alt=media&token=c215c998-b2a6-4459-89b7-8a433018f5d9",
+    "status": "approved",
+    "createdBy": "w8IMEv5NQiR8p9l8mPgg9HDvy6w1",
+    "createdAt": {
+      "_seconds": 1779023981,
+      "_nanoseconds": 508000000
+    },
+    "category": "Drinks",
+    "isAvailable": true,
+    "stockQuantity": 6
+  },
+  {
+    "id": "W9zwC8g7IBlxqTp2GHuY",
+    "name": "Tamarin Juice",
+    "price": 500,
+    "image": "https://picsum.photos/seed/food/400/300",
+    "category": "Drinks",
+    "isAvailable": true,
+    "stockQuantity": 3
+  },
+  {
+    "id": "arbIm7EiExv8NHQVVX4x",
+    "name": "Pina Colada",
+    "price": 3500,
+    "image": "https://firebasestorage.googleapis.com/v0/b/restaurant-management-sy-afdd2.firebasestorage.app/o/menu%2F1779024043063_PP.jpg?alt=media&token=60457691-b5ef-4ac8-b8ff-84f25f18d058",
+    "category": "Drinks",
+    "status": "approved",
+    "createdBy": "w8IMEv5NQiR8p9l8mPgg9HDvy6w1",
+    "createdAt": {
+      "_seconds": 1779024114,
+      "_nanoseconds": 748000000
+    },
+    "isAvailable": true,
+    "stockQuantity": 6
+  },
+  {
+    "id": "bBND0dHEEnI0k9CCKn4M",
+    "name": "Pounded Yam ",
+    "price": 2500,
+    "image": "https://picsum.photos/seed/food/400/300",
+    "category": "Meals",
+    "isAvailable": true,
+    "stockQuantity": 5
+  },
+  {
+    "id": "es8HWjKyJcLaQTxV2HFs",
+    "name": "Kunun Gyada",
+    "price": 100,
+    "image": "https://picsum.photos/seed/food/400/300",
+    "category": "Drinks",
+    "isAvailable": true,
+    "stockQuantity": 19
+  },
+  {
+    "id": "jNB7WlFIAJJVVfrnyGaf",
+    "name": "Ginger Drink",
+    "price": 100,
+    "image": "https://picsum.photos/seed/food/400/300",
+    "category": "Drinks",
+    "isAvailable": false,
+    "stockQuantity": 0
+  },
+  {
+    "id": "lRNHqvwRmUQ8m5NzJI1F",
+    "name": "Jollof Rice",
+    "price": 1000,
+    "image": "https://picsum.photos/seed/food/400/300",
+    "category": "Rice Dishes",
+    "isAvailable": false,
+    "stockQuantity": 0
+  },
+  {
+    "id": "o7MzV1PfNmCE5EakdeQR",
+    "name": "Egg and Yam",
+    "price": 100,
+    "image": "https://picsum.photos/seed/food/400/300",
+    "category": "Meals",
+    "createdBy": "1ddsAxQJT0Ncw9CKjcHjTYjUp0O2",
+    "createdAt": {
+      "_seconds": 1778133008,
+      "_nanoseconds": 789000000
+    },
+    "status": "approved",
+    "isAvailable": false,
+    "stockQuantity": 0
+  },
+  {
+    "id": "oWMHFCmbTpe8OlpB13D1",
+    "name": "Fried Rice",
+    "category": "Rice Dishes",
+    "image": "https://firebasestorage.googleapis.com/v0/b/restaurant-management-sy-afdd2.firebasestorage.app/o/menu%2F1779024410722_IMG-20260507-WA0038.jpg?alt=media&token=1f0fd6ce-53a4-4241-a244-0f6a0aa67dc1",
+    "price": 5000,
+    "isAvailable": false,
+    "stockQuantity": 0
+  }
+]

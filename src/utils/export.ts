@@ -595,3 +595,475 @@ export const exportMenuToExcel = (items: any[], filename = "Queens_Palace_Menu_C
   XLSX.utils.book_append_sheet(workbook, worksheet, "Menu Catalog");
   XLSX.writeFile(workbook, `${filename}_${format(new Date(), "yyyyMMdd_HHmm")}.xlsx`);
 };
+
+// ============================================
+// Enriched Inventory Exports
+// ============================================
+
+export const exportInventoryToCSV = (items: any[], filename = "Queens_Palace_Inventory_Report") => {
+  const headers = [
+    "Item ID",
+    "Item Name",
+    "Category",
+    "Unit Price (NGN)",
+    "Current Stock",
+    "Unit",
+    "Low Stock Alert Threshold",
+    "Stock Status",
+    "Stock Valuation (NGN)",
+    "Track Inventory",
+    "Last Updated",
+  ];
+
+  const escapeCSV = (val: any) => {
+    if (val === null || val === undefined) return '""';
+    const str = String(val).replace(/"/g, '""');
+    return `"${str}"`;
+  };
+
+  const rows = items.map((item) => {
+    const qty = Number(item.quantity ?? item.quantity_available ?? item.stockQuantity ?? 0);
+    const price = Number(item.price ?? item.item_price ?? 0);
+    const threshold = Number(item.low_stock_threshold ?? 5);
+    const status = item.stock_status || (qty <= 0 ? "Out of Stock" : qty <= threshold ? "Low Stock" : "In Stock");
+    const stockVal = Number(item.stock_value ?? (qty * price));
+
+    return [
+      escapeCSV(item.menu_item_id || item.id),
+      escapeCSV(item.name || item.item_name),
+      escapeCSV(item.category_name || item.category || "Uncategorized"),
+      escapeCSV(price.toFixed(2)),
+      escapeCSV(qty),
+      escapeCSV(item.unit_of_measure || "portion"),
+      escapeCSV(threshold),
+      escapeCSV(status),
+      escapeCSV(stockVal.toFixed(2)),
+      escapeCSV(item.track_inventory ? "Yes" : "No"),
+      escapeCSV(item.last_updated || item.updated_at || ""),
+    ];
+  });
+
+  const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.setAttribute("href", url);
+  link.setAttribute("download", `${filename}_${format(new Date(), "yyyyMMdd_HHmm")}.csv`);
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+export const exportInventoryToExcel = (items: any[], filename = "Queens_Palace_Inventory_Report") => {
+  let totalStock = 0;
+  let totalValue = 0;
+
+  const data = items.map((item, idx) => {
+    const qty = Number(item.quantity ?? item.quantity_available ?? item.stockQuantity ?? 0);
+    const price = Number(item.price ?? item.item_price ?? 0);
+    const threshold = Number(item.low_stock_threshold ?? 5);
+    const status = item.stock_status || (qty <= 0 ? "Out of Stock" : qty <= threshold ? "Low Stock" : "In Stock");
+    const stockVal = Number(item.stock_value ?? (qty * price));
+
+    totalStock += qty;
+    totalValue += stockVal;
+
+    return {
+      "#": idx + 1,
+      "Item ID": item.menu_item_id || item.id,
+      "Item Name": item.name || item.item_name,
+      "Category": item.category_name || item.category || "Uncategorized",
+      "Unit Price (NGN)": price,
+      "Current Stock": qty,
+      "Unit": item.unit_of_measure || "portion",
+      "Threshold": threshold,
+      "Stock Status": status,
+      "Stock Value (NGN)": stockVal,
+      "Track Inventory": item.track_inventory ? "Yes" : "No",
+      "Last Updated": item.last_updated || item.updated_at || "",
+    };
+  });
+
+  // Summary Row
+  data.push({
+    "#": "" as any,
+    "Item ID": "" as any,
+    "Item Name": "TOTAL SUMMARY",
+    "Category": `${items.length} Tracked Items`,
+    "Unit Price (NGN)": "" as any,
+    "Current Stock": totalStock,
+    "Unit": "Units/Portions",
+    "Threshold": "" as any,
+    "Stock Status": "",
+    "Stock Value (NGN)": totalValue,
+    "Track Inventory": "",
+    "Last Updated": "",
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(data);
+  worksheet["!cols"] = [
+    { wch: 5 },
+    { wch: 10 },
+    { wch: 28 },
+    { wch: 18 },
+    { wch: 16 },
+    { wch: 14 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 15 },
+    { wch: 18 },
+    { wch: 15 },
+    { wch: 20 },
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory Valuation");
+  XLSX.writeFile(workbook, `${filename}_${format(new Date(), "yyyyMMdd_HHmm")}.xlsx`);
+};
+
+export const exportInventoryToPDF = (items: any[], filename = "Queens_Palace_Inventory_Report") => {
+  const doc = new jsPDF({ orientation: "landscape" });
+
+  let totalStock = 0;
+  let totalValue = 0;
+  let lowStockCount = 0;
+  let outOfStockCount = 0;
+
+  const tableData = items.map((item) => {
+    const qty = Number(item.quantity ?? item.quantity_available ?? item.stockQuantity ?? 0);
+    const price = Number(item.price ?? item.item_price ?? 0);
+    const threshold = Number(item.low_stock_threshold ?? 5);
+    const status = item.stock_status || (qty <= 0 ? "Out of Stock" : qty <= threshold ? "Low Stock" : "In Stock");
+    const stockVal = Number(item.stock_value ?? (qty * price));
+
+    totalStock += qty;
+    totalValue += stockVal;
+    if (qty <= 0) outOfStockCount++;
+    else if (qty <= threshold) lowStockCount++;
+
+    return [
+      String(item.menu_item_id || item.id),
+      item.name || item.item_name || "",
+      item.category_name || item.category || "General",
+      `₦${price.toLocaleString()}`,
+      `${qty} ${item.unit_of_measure || "plates"}`,
+      String(threshold),
+      status,
+      `₦${stockVal.toLocaleString()}`,
+    ];
+  });
+
+  // Header styling
+  doc.setFontSize(18);
+  doc.setTextColor(139, 30, 30); // Royal Red
+  doc.text("Queen's Palace Eatery - Inventory Valuation & Stock Health Report", 14, 16);
+
+  doc.setFontSize(9);
+  doc.setTextColor(100);
+  doc.text(
+    `Generated on: ${format(new Date(), "dd MMM yyyy, h:mm a")}  |  Total Items: ${items.length}  |  Total Valuation: ₦${totalValue.toLocaleString()}  |  Low Stock: ${lowStockCount}  |  Out of Stock: ${outOfStockCount}`,
+    14,
+    24
+  );
+
+  runAutoTable(doc, {
+    head: [["ID", "Dish / Item Name", "Category", "Unit Price", "Stock Qty", "Alert Min", "Status", "Stock Value"]],
+    body: tableData,
+    startY: 30,
+    styles: { fontSize: 8, cellPadding: 2.5 },
+    headStyles: { fillColor: [139, 30, 30], textColor: [255, 255, 255], fontStyle: "bold" },
+    alternateRowStyles: { fillColor: [250, 250, 250] },
+    margin: { top: 30, left: 14, right: 14 },
+    didParseCell: (hookData: any) => {
+      if (hookData.section === "body" && hookData.column.index === 6) {
+        const text = String(hookData.cell.raw);
+        if (text === "Out of Stock") hookData.cell.styles.textColor = [200, 30, 30];
+        else if (text === "Low Stock") hookData.cell.styles.textColor = [180, 100, 0];
+        else hookData.cell.styles.textColor = [30, 130, 60];
+      }
+    },
+  });
+
+  doc.save(`${filename}_${format(new Date(), "yyyyMMdd_HHmm")}.pdf`);
+};
+
+// ============================================
+// Enriched Transaction Ledger Exports
+// ============================================
+
+export const exportTransactionsToCSV = (transactions: any[], filename = "Queens_Palace_Transactions_Report") => {
+  const headers = [
+    "Transaction Ref",
+    "Order Number",
+    "Date & Time",
+    "Customer",
+    "Contact",
+    "Cashier / Staff",
+    "Order Type",
+    "Subtotal (NGN)",
+    "Packaging (NGN)",
+    "Total Amount (NGN)",
+    "Payment Method",
+    "Payment Status",
+    "Provider",
+  ];
+
+  const escapeCSV = (val: any) => {
+    if (val === null || val === undefined) return '""';
+    const str = String(val).replace(/"/g, '""');
+    return `"${str}"`;
+  };
+
+  const rows = transactions.map((t) => {
+    const amt = Number(t.amount ?? t.total ?? 0);
+    const dateStr = t.created_at || (t.createdAt?.toDate ? format(t.createdAt.toDate(), "yyyy-MM-dd HH:mm") : "");
+
+    return [
+      escapeCSV(t.transaction_reference || t.reference || `#${t.id}`),
+      escapeCSV(t.order_number || t.orderId || t.orderNumber || ""),
+      escapeCSV(dateStr),
+      escapeCSV(t.customer_name || t.customerName || "Walk-in / Guest"),
+      escapeCSV(t.customer_phone || t.customer_email || ""),
+      escapeCSV(t.cashier_name || "Counter Staff"),
+      escapeCSV((t.order_type || t.deliveryType || "takeaway").toUpperCase()),
+      escapeCSV(Number(t.subtotal ?? 0).toFixed(2)),
+      escapeCSV(Number(t.packaging_fee ?? 0).toFixed(2)),
+      escapeCSV(amt.toFixed(2)),
+      escapeCSV((t.payment_method || t.paymentMethod || "CASH").toUpperCase()),
+      escapeCSV((t.payment_status || t.status || "completed").toUpperCase()),
+      escapeCSV(t.provider || "Internal POS"),
+    ];
+  });
+
+  const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.setAttribute("href", url);
+  link.setAttribute("download", `${filename}_${format(new Date(), "yyyyMMdd_HHmm")}.csv`);
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+export const exportTransactionsToExcel = (transactions: any[], filename = "Queens_Palace_Transactions_Report") => {
+  let totalAmount = 0;
+
+  const data = transactions.map((t, idx) => {
+    const amt = Number(t.amount ?? t.total ?? 0);
+    totalAmount += amt;
+
+    return {
+      "#": idx + 1,
+      "Ref": t.transaction_reference || t.reference || `#${t.id}`,
+      "Order Number": t.order_number || t.orderId || t.orderNumber || "",
+      "Date & Time": t.created_at || (t.createdAt?.toDate ? format(t.createdAt.toDate(), "yyyy-MM-dd HH:mm") : ""),
+      "Customer": t.customer_name || t.customerName || "Walk-in / Guest",
+      "Customer Contact": t.customer_phone || t.customer_email || "",
+      "Staff / Cashier": t.cashier_name || "Counter Staff",
+      "Order Type": t.order_type || t.deliveryType || "takeaway",
+      "Subtotal (NGN)": Number(t.subtotal ?? 0),
+      "Packaging (NGN)": Number(t.packaging_fee ?? 0),
+      "Total Amount (NGN)": amt,
+      "Payment Method": (t.payment_method || t.paymentMethod || "CASH").toUpperCase(),
+      "Status": (t.payment_status || t.status || "completed").toUpperCase(),
+      "Gateway Provider": t.provider || "Internal POS",
+    };
+  });
+
+  data.push({
+    "#": "" as any,
+    "Ref": "TOTAL",
+    "Order Number": `${transactions.length} Transactions`,
+    "Date & Time": "",
+    "Customer": "",
+    "Customer Contact": "",
+    "Staff / Cashier": "",
+    "Order Type": "",
+    "Subtotal (NGN)": "" as any,
+    "Packaging (NGN)": "" as any,
+    "Total Amount (NGN)": totalAmount,
+    "Payment Method": "",
+    "Status": "",
+    "Gateway Provider": "",
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(data);
+  worksheet["!cols"] = [
+    { wch: 5 },
+    { wch: 18 },
+    { wch: 16 },
+    { wch: 18 },
+    { wch: 22 },
+    { wch: 22 },
+    { wch: 18 },
+    { wch: 14 },
+    { wch: 15 },
+    { wch: 15 },
+    { wch: 18 },
+    { wch: 16 },
+    { wch: 14 },
+    { wch: 16 },
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Transactions Ledger");
+  XLSX.writeFile(workbook, `${filename}_${format(new Date(), "yyyyMMdd_HHmm")}.xlsx`);
+};
+
+export const exportTransactionsToPDF = (transactions: any[], filename = "Queens_Palace_Transactions_Report") => {
+  const doc = new jsPDF({ orientation: "landscape" });
+
+  let totalAmount = 0;
+  const tableData = transactions.map((t) => {
+    const amt = Number(t.amount ?? t.total ?? 0);
+    totalAmount += amt;
+
+    const dateStr = t.created_at || (t.createdAt?.toDate ? format(t.createdAt.toDate(), "MMM dd, HH:mm") : "");
+    return [
+      t.transaction_reference || t.reference || `#${t.id}`,
+      t.order_number || t.orderId || "",
+      dateStr,
+      t.customer_name || t.customerName || "Walk-in Guest",
+      t.cashier_name || "Staff",
+      (t.order_type || "Takeaway").toUpperCase(),
+      `₦${amt.toLocaleString()}`,
+      (t.payment_method || "CASH").toUpperCase(),
+      (t.payment_status || "PAID").toUpperCase(),
+    ];
+  });
+
+  doc.setFontSize(18);
+  doc.setTextColor(139, 30, 30);
+  doc.text("Queen's Palace Eatery - Transactions & Revenue Ledger", 14, 16);
+
+  doc.setFontSize(9);
+  doc.setTextColor(100);
+  doc.text(
+    `Generated: ${format(new Date(), "dd MMM yyyy, h:mm a")}  |  Total Count: ${transactions.length} Transactions  |  Total Revenue: ₦${totalAmount.toLocaleString()}`,
+    14,
+    24
+  );
+
+  runAutoTable(doc, {
+    head: [["Reference", "Order #", "Date/Time", "Customer", "Cashier", "Type", "Amount", "Method", "Status"]],
+    body: tableData,
+    startY: 30,
+    styles: { fontSize: 8, cellPadding: 2.5 },
+    headStyles: { fillColor: [139, 30, 30], textColor: [255, 255, 255], fontStyle: "bold" },
+    alternateRowStyles: { fillColor: [250, 250, 250] },
+    margin: { top: 30, left: 14, right: 14 },
+  });
+
+  doc.save(`${filename}_${format(new Date(), "yyyyMMdd_HHmm")}.pdf`);
+};
+
+// ============================================
+// Enriched Sales Performance Exports
+// ============================================
+
+export const exportSalesReportToCSV = (salesData: any, filename = "Queens_Palace_Sales_Report") => {
+  const trend = (salesData?.sales_trend || []).map((t: any) => ({
+    "Date": t.date,
+    "Orders Count": Number(t.order_count || 0),
+    "Gross Sales (NGN)": Number(t.total_sales || 0),
+    "Average Ticket (NGN)": Number(t.avg_order_value || 0),
+  }));
+
+  if (trend.length === 0) {
+    trend.push({
+      "Date": "N/A",
+      "Orders Count": 0,
+      "Gross Sales (NGN)": 0,
+      "Average Ticket (NGN)": 0,
+    });
+  }
+
+  exportToCSV(trend, `${filename}_${format(new Date(), "yyyyMMdd_HHmm")}`);
+};
+
+export const exportSalesReportToExcel = (salesData: any, filename = "Queens_Palace_Sales_Report") => {
+  const trend = (salesData?.sales_trend || []).map((t: any, idx: number) => ({
+    "#": idx + 1,
+    "Date": t.date,
+    "Gross Sales (NGN)": Number(t.total_sales || 0),
+    "Orders Count": Number(t.order_count || 0),
+    "Average Ticket (NGN)": Number(t.avg_order_value || 0),
+  }));
+
+  const paymentBreakdown = (salesData?.payment_methods || []).map((p: any) => ({
+    "Payment Method": (p.payment_method || "CASH").toUpperCase(),
+    "Orders Count": Number(p.count || 0),
+    "Total Collected (NGN)": Number(p.total || 0),
+  }));
+
+  const categoryBreakdown = (salesData?.category_sales || []).map((c: any) => ({
+    "Category": c.category_name || "Uncategorized",
+    "Items Sold": Number(c.items_sold || 0),
+    "Total Sales (NGN)": Number(c.total_sales || 0),
+  }));
+
+  const workbook = XLSX.utils.book_new();
+
+  const trendSheet = XLSX.utils.json_to_sheet(trend);
+  XLSX.utils.book_append_sheet(workbook, trendSheet, "Daily Sales Trend");
+
+  if (paymentBreakdown.length > 0) {
+    const paymentSheet = XLSX.utils.json_to_sheet(paymentBreakdown);
+    XLSX.utils.book_append_sheet(workbook, paymentSheet, "Payment Methods");
+  }
+
+  if (categoryBreakdown.length > 0) {
+    const catSheet = XLSX.utils.json_to_sheet(categoryBreakdown);
+    XLSX.utils.book_append_sheet(workbook, catSheet, "Category Sales");
+  }
+
+  XLSX.writeFile(workbook, `${filename}_${format(new Date(), "yyyyMMdd_HHmm")}.xlsx`);
+};
+
+export const exportSalesReportToPDF = (salesData: any, filename = "Queens_Palace_Sales_Report") => {
+  const doc = new jsPDF();
+
+  const summary = salesData?.summary || {};
+  const totalSales = Number(summary.total_sales || 0);
+  const totalOrders = Number(summary.order_count || 0);
+  const avgTicket = Number(summary.avg_ticket || 0);
+  const packagingRev = Number(summary.total_packaging_revenue || 0);
+
+  doc.setFontSize(18);
+  doc.setTextColor(139, 30, 30);
+  doc.text("Queen's Palace Eatery - Sales & Performance Report", 14, 16);
+
+  doc.setFontSize(9);
+  doc.setTextColor(100);
+  doc.text(
+    `Period: ${salesData?.period || "Selected Range"}  |  Generated: ${format(new Date(), "dd MMM yyyy, h:mm a")}`,
+    14,
+    24
+  );
+  doc.text(
+    `Total Revenue: ₦${totalSales.toLocaleString()}  |  Total Orders: ${totalOrders}  |  Avg Ticket: ₦${avgTicket.toLocaleString()}  |  Packaging: ₦${packagingRev.toLocaleString()}`,
+    14,
+    30
+  );
+
+  const trendRows = (salesData?.sales_trend || []).map((t: any) => [
+    t.date,
+    `₦${Number(t.total_sales || 0).toLocaleString()}`,
+    String(t.order_count || 0),
+    `₦${Number(t.avg_order_value || 0).toLocaleString()}`,
+  ]);
+
+  runAutoTable(doc, {
+    head: [["Date", "Gross Sales", "Orders Count", "Average Ticket"]],
+    body: trendRows,
+    startY: 36,
+    styles: { fontSize: 8, cellPadding: 2.5 },
+    headStyles: { fillColor: [139, 30, 30], textColor: [255, 255, 255] },
+    alternateRowStyles: { fillColor: [250, 250, 250] },
+  });
+
+  doc.save(`${filename}_${format(new Date(), "yyyyMMdd_HHmm")}.pdf`);
+};

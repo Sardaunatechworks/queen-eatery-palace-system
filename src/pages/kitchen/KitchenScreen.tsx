@@ -5,6 +5,7 @@ import { useSSE } from "../../hooks/useSSE";
 import {
   ChefHat,
   CheckCircle,
+  CheckCircle2,
   Clock,
   Timer,
   UtensilsCrossed,
@@ -38,8 +39,13 @@ const ProfileSettings = React.lazy(() =>
   import("../shared/ProfileSettings").then((m) => ({ default: m.ProfileSettings }))
 );
 
+const InventoryManagement = React.lazy(() =>
+  import("../admin/InventoryManagement").then((m) => ({ default: m.InventoryManagement }))
+);
+
 const kitchenNavigation = [
   { name: "Kitchen Display", path: "/kitchen/dashboard", icon: ChefHat },
+  { name: "Inventory", path: "/kitchen/inventory", icon: Package },
   { name: "Profile", path: "/kitchen/profile", icon: User },
 ];
 
@@ -50,6 +56,11 @@ const KitchenDashboardContent: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"orders" | "menu">("orders");
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showAddCookedPlatesModal, setShowAddCookedPlatesModal] = useState(false);
+  const [batchPlatesData, setBatchPlatesData] = useState({
+    menuItemId: "",
+    plates: "10",
+  });
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -147,6 +158,7 @@ const KitchenDashboardContent: React.FC = () => {
         isFirstKitchenLoad.current = false;
         setOrders(active);
         setCategories(dashRes.data.categories || []);
+        setMenu(dashRes.data.menu || []);
         return;
       }
 
@@ -244,21 +256,99 @@ const KitchenDashboardContent: React.FC = () => {
       if (!originalItem) return;
 
       const targetQuantity = Math.max(0, newStock);
-
       const currentStock = originalItem.quantity_available ?? originalItem.stockQuantity ?? 0;
       const diff = targetQuantity - currentStock;
       if (diff === 0) return;
 
+      // Optimistically update local menu state so kitchen display responds instantaneously
+      setMenu((prev) =>
+        prev.map((item) =>
+          String(item.id) === String(id)
+            ? { ...item, quantity_available: targetQuantity, stockQuantity: targetQuantity }
+            : item
+        )
+      );
+
       await updateMenuItemStock(Number(id), {
         quantity: Math.abs(diff),
         movement_type: diff > 0 ? "add" : "deduction",
+        notes: diff > 0 ? `Kitchen added ${diff} plates` : `Kitchen deducted ${Math.abs(diff)} portions`,
       });
 
-      showToast("Stock updated successfully", "success");
+      showToast(`Stock for ${originalItem.name} updated to ${targetQuantity}`, "success");
+
+      // Broadcast immediately to cashier POS and open windows
+      try {
+        const channel = new BroadcastChannel("qep_inventory_channel");
+        channel.postMessage({
+          type: "STOCK_UPDATED",
+          itemId: Number(id),
+          quantity: targetQuantity,
+        });
+        channel.close();
+      } catch {}
+
       fetchKitchenData();
     } catch (error: any) {
       showToast(error.message || "Failed to update stock", "error");
+      fetchKitchenData();
     }
+  };
+
+  const handleAddPlates = async (id: string, additionalPlates: number) => {
+    if (additionalPlates <= 0) return;
+    const originalItem = menu.find((m) => String(m.id) === String(id));
+    if (!originalItem) return;
+
+    const currentStock = originalItem.quantity_available ?? originalItem.stockQuantity ?? 0;
+    const targetQuantity = currentStock + additionalPlates;
+
+    // Optimistically update
+    setMenu((prev) =>
+      prev.map((item) =>
+        String(item.id) === String(id)
+          ? { ...item, quantity_available: targetQuantity, stockQuantity: targetQuantity }
+          : item
+      )
+    );
+
+    try {
+      await updateMenuItemStock(Number(id), {
+        quantity: additionalPlates,
+        movement_type: "add",
+        notes: `Kitchen cooked & added ${additionalPlates} plates`,
+      });
+
+      showToast(`Added ${additionalPlates} plates to ${originalItem.name}`, "success");
+
+      try {
+        const channel = new BroadcastChannel("qep_inventory_channel");
+        channel.postMessage({
+          type: "STOCK_UPDATED",
+          itemId: Number(id),
+          quantity: targetQuantity,
+        });
+        channel.close();
+      } catch {}
+
+      fetchKitchenData();
+    } catch (error: any) {
+      showToast(error.message || "Failed to add plates", "error");
+      fetchKitchenData();
+    }
+  };
+
+  const handleBatchAddCookedPlates = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const itemId = batchPlatesData.menuItemId;
+    const count = parseInt(batchPlatesData.plates, 10);
+    if (!itemId || isNaN(count) || count <= 0) {
+      showToast("Please select a dish and enter a valid number of plates", "error");
+      return;
+    }
+    await handleAddPlates(itemId, count);
+    setShowAddCookedPlatesModal(false);
+    setBatchPlatesData({ menuItemId: "", plates: "10" });
   };
 
   const handleProposeMenu = async (e: React.FormEvent) => {
@@ -298,16 +388,23 @@ const KitchenDashboardContent: React.FC = () => {
     }
   }, [categories]);
 
-  const [statusFilter, setStatusFilter] = useState<"all" | "received" | "preparing">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "queued" | "preparing" | "ready">("all");
 
   const filteredOrders = orders.filter((o) => {
+    const s = (o.status || o.order_status || "").toLowerCase();
     if (statusFilter === "all") return true;
-    if (statusFilter === "received") return o.status === "received" || o.status === "accepted";
-    return o.status === statusFilter;
+    if (statusFilter === "queued") return s === "received" || s === "accepted" || s === "submitted" || s === "pending";
+    if (statusFilter === "preparing") return s === "preparing";
+    if (statusFilter === "ready") return s === "ready";
+    return true;
   });
 
-  const receivedCount = orders.filter((o) => o.status === "received" || o.status === "accepted").length;
-  const preparingCount = orders.filter((o) => o.status === "preparing").length;
+  const queuedCount = orders.filter((o) => {
+    const s = (o.status || o.order_status || "").toLowerCase();
+    return s === "received" || s === "accepted" || s === "submitted" || s === "pending";
+  }).length;
+  const preparingCount = orders.filter((o) => (o.status || o.order_status) === "preparing").length;
+  const readyCount = orders.filter((o) => (o.status || o.order_status) === "ready").length;
 
   if (loading) {
     return (
@@ -376,7 +473,7 @@ const KitchenDashboardContent: React.FC = () => {
       {activeTab === "orders" ? (
         <div className="space-y-4">
           {/* Status Filter Tabs */}
-          <div className="flex items-center gap-1.5 bg-stone-100 p-0.5 rounded-lg border border-stone-200 w-fit">
+          <div className="flex items-center gap-1.5 bg-stone-100 p-0.5 rounded-lg border border-stone-200 w-fit flex-wrap">
             <button
               type="button"
               onClick={() => setStatusFilter("all")}
@@ -390,15 +487,15 @@ const KitchenDashboardContent: React.FC = () => {
             </button>
             <button
               type="button"
-              onClick={() => setStatusFilter("received")}
+              onClick={() => setStatusFilter("queued")}
               className={`px-3 py-1 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 ${
-                statusFilter === "received"
+                statusFilter === "queued"
                   ? "bg-white text-stone-900 shadow-xs"
                   : "text-stone-600 hover:text-stone-900"
               }`}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-              New Orders ({receivedCount})
+              Queue ({queuedCount})
             </button>
             <button
               type="button"
@@ -411,6 +508,18 @@ const KitchenDashboardContent: React.FC = () => {
             >
               <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
               Preparing ({preparingCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter("ready")}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 ${
+                statusFilter === "ready"
+                  ? "bg-white text-stone-900 shadow-xs"
+                  : "text-stone-600 hover:text-stone-900"
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              Ready for Handover ({readyCount})
             </button>
           </div>
 
@@ -477,10 +586,23 @@ const KitchenDashboardContent: React.FC = () => {
                       </div>
 
                       <div className="text-right shrink-0">
-                        <Badge size="sm" variant={isNew ? "warning" : "info"}>
-                          {isNew ? (
+                        <Badge
+                          size="sm"
+                          variant={
+                            order.status === "ready"
+                              ? "success"
+                              : isNew
+                              ? "warning"
+                              : "info"
+                          }
+                        >
+                          {order.status === "ready" ? (
                             <span className="flex items-center gap-1">
-                              <Timer size={11} /> New
+                              <CheckCircle size={11} /> Ready
+                            </span>
+                          ) : isNew ? (
+                            <span className="flex items-center gap-1">
+                              <Timer size={11} /> Queued
                             </span>
                           ) : (
                             <span className="flex items-center gap-1">
@@ -528,7 +650,7 @@ const KitchenDashboardContent: React.FC = () => {
 
                     {/* Ticket Action Button */}
                     <div className="p-3 bg-stone-50 border-t border-stone-200">
-                      {(order.status === "received" || order.status === "accepted") && (
+                      {(order.status === "received" || order.status === "accepted" || order.status === "submitted" || order.status === "pending") && (
                         <Button
                           variant="primary"
                           size="md"
@@ -548,6 +670,15 @@ const KitchenDashboardContent: React.FC = () => {
                           <CheckCircle size={14} /> Mark as Ready
                         </button>
                       )}
+                      {order.status === "ready" && (
+                        <button
+                          type="button"
+                          onClick={() => handleStatusChange(String(order.id), "completed")}
+                          className="w-full h-9 rounded-lg bg-stone-900 hover:bg-stone-800 text-white font-medium text-xs flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+                        >
+                          <CheckCircle2 size={14} /> Handed Over / Completed
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -558,16 +689,26 @@ const KitchenDashboardContent: React.FC = () => {
       ) : (
         /* Kitchen Inventory Portions Table */
         <div className="bg-white rounded-lg border border-stone-200 shadow-xs overflow-hidden">
-          <div className="px-5 py-3.5 bg-stone-50 border-b border-stone-200 flex justify-between items-center">
+          <div className="px-5 py-3.5 bg-stone-50 border-b border-stone-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2.5">
             <div>
               <h3 className="text-sm font-semibold text-stone-900">Live Portion Stock</h3>
               <p className="text-xs text-stone-500">
-                Adjust available portions or flag dishes as sold out in real-time
+                Adjust available portions or flag dishes as sold out in real-time (directly reflects to Cashier POS)
               </p>
             </div>
-            <Badge variant="neutral" size="sm">
-              {menu.length} Dishes
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                icon={<Plus size={14} />}
+                onClick={() => setShowAddCookedPlatesModal(true)}
+              >
+                Add Cooked Plates
+              </Button>
+              <Badge variant="neutral" size="sm">
+                {menu.length} Dishes
+              </Badge>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -577,7 +718,7 @@ const KitchenDashboardContent: React.FC = () => {
                   <th className="py-3 px-4">Item</th>
                   <th className="py-3 px-4">Category</th>
                   <th className="py-3 px-4 text-center">Portions Left</th>
-                  <th className="py-3 px-4 text-center">Quick Stock Adjustment</th>
+                  <th className="py-3 px-4 text-center">Portion / Plates Management</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 text-stone-700">
@@ -622,38 +763,68 @@ const KitchenDashboardContent: React.FC = () => {
                       </td>
 
                       <td className="py-2.5 px-4">
-                        <div className="flex items-center justify-center gap-1.5">
+                        <div className="flex items-center justify-center gap-1.5 flex-wrap">
                           <button
                             type="button"
-                            onClick={() => handleStockUpdate(String(item.id), qty - 1)}
+                            onClick={() => handleStockUpdate(String(item.id), Math.max(0, qty - 1))}
                             disabled={qty <= 0}
                             className="w-7 h-7 rounded border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 transition-colors flex items-center justify-center font-medium disabled:opacity-40"
-                            title="Deduct 1"
+                            title="Deduct 1 portion"
                           >
                             -1
                           </button>
+                          
+                          <input
+                            type="number"
+                            min={0}
+                            value={qty}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value, 10);
+                              handleStockUpdate(String(item.id), isNaN(val) ? 0 : val);
+                            }}
+                            className="w-14 h-7 text-center text-xs font-bold text-stone-900 font-mono bg-white border border-stone-300 rounded focus:outline-none focus:border-[#8B1E1E]"
+                            title="Directly key-in plates left"
+                          />
+
                           <button
                             type="button"
-                            onClick={() => handleStockUpdate(String(item.id), qty + 1)}
+                            onClick={() => handleAddPlates(String(item.id), 1)}
                             className="w-7 h-7 rounded border border-stone-200 bg-white text-stone-700 hover:bg-stone-50 transition-colors flex items-center justify-center font-medium"
-                            title="Add 1"
+                            title="Add 1 plate"
                           >
                             +1
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleStockUpdate(String(item.id), qty + 10)}
+                            onClick={() => handleAddPlates(String(item.id), 5)}
                             className="px-2 h-7 rounded border border-stone-200 bg-stone-100 text-stone-800 hover:bg-stone-200 transition-colors flex items-center justify-center font-medium text-[11px]"
-                            title="Add 10"
+                            title="Add 5 plates"
+                          >
+                            +5
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAddPlates(String(item.id), 10)}
+                            className="px-2 h-7 rounded border border-stone-200 bg-stone-100 text-stone-800 hover:bg-stone-200 transition-colors flex items-center justify-center font-medium text-[11px]"
+                            title="Add 10 plates"
                           >
                             +10
                           </button>
-                          <div className="w-[1px] h-4 bg-stone-200 mx-1" />
+                          <button
+                            type="button"
+                            onClick={() => handleAddPlates(String(item.id), 20)}
+                            className="px-2 h-7 rounded border border-stone-200 bg-stone-100 text-stone-800 hover:bg-stone-200 transition-colors flex items-center justify-center font-medium text-[11px]"
+                            title="Add 20 plates"
+                          >
+                            +20
+                          </button>
+                          <div className="w-[1px] h-4 bg-stone-200 mx-0.5" />
                           <button
                             type="button"
                             onClick={() => handleStockUpdate(String(item.id), 0)}
                             disabled={qty === 0}
                             className="px-2.5 h-7 rounded border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 transition-colors text-[11px] font-medium disabled:opacity-40"
+                            title="Mark as Sold Out immediately"
                           >
                             Sold Out
                           </button>
@@ -758,6 +929,91 @@ const KitchenDashboardContent: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Quick Add Cooked Plates Modal */}
+      {showAddCookedPlatesModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl border border-stone-200 shadow-xl w-full max-w-md overflow-hidden animate-scale-in">
+            <div className="px-6 py-4 border-b border-stone-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-stone-900">Add Cooked Plates to Stock</h2>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Directly adds portions of food ready for sale at the cashier counter.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddCookedPlatesModal(false)}
+                className="p-1 rounded-md text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleBatchAddCookedPlates} className="p-6 space-y-4">
+              <div>
+                <label className="text-xs font-medium text-stone-700 block mb-1">
+                  Select Food Dish
+                </label>
+                <select
+                  required
+                  value={batchPlatesData.menuItemId}
+                  onChange={(e) => setBatchPlatesData({ ...batchPlatesData, menuItemId: e.target.value })}
+                  className="w-full h-10 px-3 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 font-medium focus:outline-none focus:border-[#8B1E1E]"
+                >
+                  <option value="">-- Select Dish --</option>
+                  {menu.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} (Current: {m.quantity_available ?? m.stockQuantity ?? 0} plates)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-stone-700 block mb-1">
+                  Plates Cooked & Prepared
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  required
+                  value={batchPlatesData.plates}
+                  onChange={(e) => setBatchPlatesData({ ...batchPlatesData, plates: e.target.value })}
+                  placeholder="e.g. 25"
+                  className="w-full h-10 px-3 bg-white border border-stone-300 rounded-lg text-xs text-stone-900 font-mono font-bold focus:outline-none focus:border-[#8B1E1E]"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                {[5, 10, 15, 20, 30, 50].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setBatchPlatesData({ ...batchPlatesData, plates: String(preset) })}
+                    className="flex-1 py-1 bg-stone-100 hover:bg-stone-200 border border-stone-200 rounded text-xs font-mono font-semibold text-stone-700 transition-colors"
+                  >
+                    +{preset}
+                  </button>
+                ))}
+              </div>
+
+              <div className="p-4 bg-stone-50 -mx-6 -mb-6 mt-6 border-t border-stone-200 flex justify-end gap-2.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="md"
+                  onClick={() => setShowAddCookedPlatesModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" size="md">
+                  Add to Live Counter
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -768,6 +1024,21 @@ export const KitchenScreen: React.FC = () => {
       <Routes>
         <Route path="/" element={<Navigate to="dashboard" replace />} />
         <Route path="/dashboard" element={<KitchenDashboardContent />} />
+        <Route
+          path="/inventory"
+          element={
+            <React.Suspense
+              fallback={
+                <div className="py-20 flex flex-col items-center justify-center">
+                  <div className="w-8 h-8 border-2 border-[#8B1E1E] border-t-transparent rounded-full animate-spin mb-3" />
+                  <p className="text-xs text-stone-500 font-medium">Loading Inventory System...</p>
+                </div>
+              }
+            >
+              <InventoryManagement />
+            </React.Suspense>
+          }
+        />
         <Route path="/profile" element={<ProfileSettings />} />
       </Routes>
     </DashboardLayout>

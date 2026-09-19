@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "../../services/apiClient";
 import { useUI } from "../../context/UIContext";
+import { useAuth } from "../../context/AuthContext";
 import {
   User,
   Shield,
@@ -44,6 +45,7 @@ interface UserProfile {
 }
 
 export const StaffManagement: React.FC = () => {
+  const { user: currentUser, refreshSession } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -76,15 +78,16 @@ export const StaffManagement: React.FC = () => {
 
   const handleOpenPermissionsModal = (user: UserProfile) => {
     setShowPermissionsModal(user);
+    const p = user.permissions || {};
     setTempPermissions({
-      manageInventory: user.permissions?.manageInventory ?? false,
-      manageOrders: user.permissions?.manageOrders ?? false,
-      manageMenu: user.permissions?.manageMenu ?? false,
-      manageReports: user.permissions?.manageReports ?? false,
-      manageCMS: user.permissions?.manageCMS ?? false,
-      manageNotifications: user.permissions?.manageNotifications ?? false,
-      manageStaff: user.permissions?.manageStaff ?? false,
-      viewDashboard: user.permissions?.viewDashboard ?? false,
+      manageInventory: !!(p.manageInventory || p['inventory.view']),
+      manageOrders: !!(p.manageOrders || p['orders.view'] || p['orders.create']),
+      manageMenu: !!(p.manageMenu || p['menu.view'] || p['menu.create']),
+      manageReports: !!(p.manageReports || p['reports.view']),
+      manageCMS: !!(p.manageCMS || p['cms.view']),
+      manageNotifications: !!(p.manageNotifications || p['notifications.view']),
+      manageStaff: !!(p.manageStaff || p['staff.view'] || p['staff.manage_permissions']),
+      viewDashboard: !!(p.viewDashboard || p['reports.view'] || p['orders.view'] || user.role === 'admin'),
     });
   };
 
@@ -92,12 +95,41 @@ export const StaffManagement: React.FC = () => {
     if (!showPermissionsModal) return;
     setGlobalLoading(true);
     try {
-      await apiClient.put(`/users/${showPermissionsModal.id}/permissions`, {
+      const res: any = await apiClient.put(`/users/${showPermissionsModal.id}/permissions`, {
         permissions: tempPermissions,
       });
+
+      const updatedPermissions = res?.data?.permissions || tempPermissions;
+
+      // 1. Optimistically update local users state immediately
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === showPermissionsModal.id
+            ? { ...u, permissions: { ...u.permissions, ...updatedPermissions } }
+            : u
+        )
+      );
+
+      // 2. Broadcast real-time signal via BroadcastChannel
+      try {
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          const channel = new BroadcastChannel('qep_auth_channel');
+          channel.postMessage({
+            type: 'PERMISSIONS_UPDATED',
+            userId: showPermissionsModal.id,
+          });
+          channel.close();
+        }
+      } catch {}
+
+      // 3. If the updated user is the currently logged-in user, refresh session immediately
+      if (currentUser?.uid === showPermissionsModal.id) {
+        await refreshSession();
+      }
+
       showToast(`Permissions updated for ${showPermissionsModal.name}`, "success");
       setShowPermissionsModal(null);
-      fetchUsers();
+      await fetchUsers();
     } catch (error: any) {
       showToast(`Failed to update permissions: ${error.message}`, "error");
     } finally {
@@ -381,14 +413,22 @@ export const StaffManagement: React.FC = () => {
                 filteredUsers.map((user) => {
                   const isSuspended = user.status === "suspended";
 
+                  const canEditPermissions =
+                    user.role !== "super_admin" &&
+                    (currentUser?.role === "super_admin" || user.role !== "admin");
+
                   const actions: ActionItem[] = [
-                    ...(user.role !== "admin" && user.role !== "super_admin"
+                    ...(canEditPermissions
                       ? [
                           {
                             label: "Edit Permissions",
                             icon: <Key size={14} />,
                             onClick: () => handleOpenPermissionsModal(user),
                           },
+                        ]
+                      : []),
+                    ...(user.role !== "super_admin"
+                      ? [
                           isSuspended
                             ? {
                                 label: "Lift Suspension",
@@ -400,14 +440,14 @@ export const StaffManagement: React.FC = () => {
                                 icon: <Ban size={14} className="text-amber-600" />,
                                 onClick: () => setShowSuspendModal(user),
                               },
+                          {
+                            label: "Delete User",
+                            icon: <Trash2 size={14} />,
+                            danger: true,
+                            onClick: () => handleDeleteUser(user.id, user.name),
+                          },
                         ]
                       : []),
-                    {
-                      label: "Delete User",
-                      icon: <Trash2 size={14} />,
-                      danger: true,
-                      onClick: () => handleDeleteUser(user.id, user.name),
-                    },
                   ];
 
                   const suspensionDateFormatted = formatSuspensionDate(user.suspensionEndDate);

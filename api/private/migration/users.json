@@ -1,0 +1,122 @@
+[
+  {
+    "uid": "6dLGtc10KhQ6oAuQUxoYzLCb1n03",
+    "email": "shuaibu12@gmail.com",
+    "name": "Shuaibu Abubakar ",
+    "phone": "09060241346",
+    "status": "active",
+    "role": "customer"
+  },
+  {
+    "uid": "CcQuS4g7mHaG99z8k0Y4hZ866D33",
+    "email": "khadijausaini55@gmail.com",
+    "name": "Khadija Usaini Muhammad",
+    "phone": "",
+    "status": "active",
+    "role": "kitchen"
+  },
+  {
+    "uid": "FqVHoeK3FWQWyi6nlEE3LUnveyi1",
+    "email": "sardaunamaa@gmail.com",
+    "name": "Muhammad Auwal Abubakar",
+    "phone": "+2349155290102",
+    "status": "active",
+    "role": "customer"
+  },
+  {
+    "uid": "HFO3ZqISIdSDpYJs1BuN5LXrDuv2",
+    "email": "khadijahussaini@gmail.com",
+    "name": "Khadija Hussaini",
+    "phone": "080123456789",
+    "status": "active",
+    "role": "customer"
+  },
+  {
+    "uid": "L6VEbNqUYwaly5kkQ9qelExozAm1",
+    "email": "sardaunamaa2008@gmail.com",
+    "name": "",
+    "phone": "",
+    "status": "active",
+    "role": "customer"
+  },
+  {
+    "uid": "McDFpqUJ6WQK6k7MFXkzJLiY3713",
+    "email": "mycryptobusinessmail1@gmail.com",
+    "name": "MUHAMMAD ABUBAKAR",
+    "phone": "07019642820",
+    "status": "active",
+    "role": "customer"
+  },
+  {
+    "uid": "RMb0VhSlXWex92Kynx1i7YU9O7e2",
+    "email": "maryamyusrahabubakar@gmail.com",
+    "name": "Maryam Abubakar",
+    "phone": "09060276333",
+    "status": "active",
+    "role": "customer"
+  },
+  {
+    "uid": "RYXggYMXeZQ85blx30vNQUCYJhc2",
+    "email": "harirasulaiman22@outlook.com",
+    "name": "Harira Sulaiman",
+    "phone": "+2348036091452",
+    "status": "active",
+    "role": "customer"
+  },
+  {
+    "uid": "Xx5mkoUEvhP0sO4FVGoo9OlZxVZ2",
+    "email": "sardaunatechworks@gmail.com",
+    "name": "Muhammad Auwal Abubakar",
+    "phone": "09060276333",
+    "status": "active",
+    "role": "customer"
+  },
+  {
+    "uid": "ZWH2HxUS0PXWOjzkyMEIRe7WgWn1",
+    "email": "admin@lumiere.com",
+    "name": "",
+    "phone": "",
+    "status": "active",
+    "role": "customer"
+  },
+  {
+    "uid": "a62EDBG4mbhWWIdxxRZUqg3mpzg1",
+    "email": "superadmin@mail.com",
+    "name": "",
+    "phone": "",
+    "status": "active",
+    "role": "customer"
+  },
+  {
+    "uid": "hNr6nGUIMSZ849dKW7UMUGk18Nx1",
+    "email": "testuser@gmail.com",
+    "name": "",
+    "phone": "",
+    "status": "active",
+    "role": "customer"
+  },
+  {
+    "uid": "jEWEURNCUoR9aSwyUFAVm8Z68zl1",
+    "email": "madugumamman@gmail.com",
+    "name": "Muhammad Mukhtar",
+    "phone": "+2347036017944",
+    "status": "active",
+    "role": "customer"
+  },
+  {
+    "uid": "lYuXkfGb9JP5N3JOi3Ykcmaxulr1",
+    "email": "muhammadmukhtar402@gmail.com",
+    "name": "Muhammad Mukhtar",
+    "phone": "",
+    "status": "active",
+    "role": "cashier"
+  },
+  {
+    "uid": "w8IMEv5NQiR8p9l8mPgg9HDvy6w1",
+    "email": "admin@queenspalaceeatery.com",
+    "name": "",
+    "phone": "",
+    "status": "active",
+    "role": "admin"
+  }
+]

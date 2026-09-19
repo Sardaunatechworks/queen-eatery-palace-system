@@ -92,6 +92,12 @@ export async function getCashierPerformance(
   return apiClient.get<ApiResponse<CashierPerformanceData>>(`/reports/cashiers${query}`);
 }
 
+function getCsrfToken(): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(/(?:^|;\s*)qep_csrf_token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 /**
  * Fetch paginated transaction ledger.
  */
@@ -103,32 +109,58 @@ export async function getTransactionLedger(
 }
 
 /**
+ * Fetch all inventory items with stock valuation for reports.
+ */
+export async function getAllInventoryForReport(): Promise<ApiResponse<any>> {
+  return apiClient.get<ApiResponse<any>>('/reports/inventory');
+}
+
+/**
  * Download exported CSV report from the backend.
  */
 export async function downloadReportCSV(
-  type: 'sales' | 'inventory' | 'transactions',
+  type: 'sales' | 'sales_detailed' | 'inventory' | 'transactions' | 'orders',
   startDate?: string,
   endDate?: string
 ): Promise<void> {
   const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://api.queenspalaceeatery.com';
   const params: Record<string, string | undefined> = { type, start_date: startDate, end_date: endDate };
   const query = buildQuery(params);
+
+  const headers: Record<string, string> = {
+    'X-Requested-With': 'XMLHttpRequest',
+  };
+  const csrf = getCsrfToken();
+  if (csrf) {
+    headers['X-CSRF-Token'] = csrf;
+  }
+
   const response = await fetch(`${API_BASE_URL}/api/v2/reports/export${query}`, {
     credentials: 'include',
-    headers: {
-      'X-Requested-With': 'XMLHttpRequest',
-    },
+    headers,
   });
 
   if (!response.ok) {
-    throw new Error('Failed to download report');
+    let errMsg = `Failed to download report (HTTP ${response.status})`;
+    try {
+      const errJson = await response.json();
+      if (errJson.message) errMsg = errJson.message;
+    } catch {}
+    throw new Error(errMsg);
+  }
+
+  let filename = `QEP_${type}_report_${new Date().toISOString().slice(0, 10)}.csv`;
+  const disposition = response.headers.get('Content-Disposition');
+  if (disposition && disposition.includes('filename=')) {
+    const match = disposition.match(/filename="?([^";]+)"?/);
+    if (match && match[1]) filename = match[1];
   }
 
   const blob = await response.blob();
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `QEP_${type}_report_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();

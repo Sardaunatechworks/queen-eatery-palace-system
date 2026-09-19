@@ -89,6 +89,11 @@ export const GlobalOrderNotifier: React.FC = () => {
   const isCashierOrAdmin = profile?.role === "cashier" || profile?.role === "admin" || profile?.role === "super_admin";
 
   const isIncomingOrder = (o: any) => {
+    // Orders placed directly by cashier at the POS counter are counter sales, NOT incoming alerts for cashier!
+    if (o.source === "cashier") {
+      return false;
+    }
+
     // Online customer orders MUST be paid and verified before cashier receives them!
     const isOnline = o.source === "customer" || o.source === "online_customer";
     if (isOnline && o.payment_status !== "paid" && o.paymentStatus !== "paid") {
@@ -97,6 +102,24 @@ export const GlobalOrderNotifier: React.FC = () => {
     const s = (o.order_status || o.status || "").toLowerCase();
     return s === "submitted" || s === "pending" || s === "received";
   };
+
+  // Listen for orders created directly by cashier in this or other tabs to prevent self-alerting
+  useEffect(() => {
+    let channel: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+        channel = new BroadcastChannel("qep_orders_channel");
+        channel.onmessage = (event) => {
+          if (event.data?.type === "ORDER_CREATED_BY_CASHIER" && event.data?.orderId) {
+            knownOrders.current.add(String(event.data.orderId));
+          }
+        };
+      }
+    } catch {}
+    return () => {
+      channel?.close();
+    };
+  }, []);
 
   const fetchPendingOrders = useCallback(async () => {
     try {

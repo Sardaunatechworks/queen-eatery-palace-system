@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { apiClient } from '../lib/apiClient';
+import { useSSE } from '../hooks/useSSE';
 import type { UserProfile, ApiResponse, UserRole, UserPermissions } from '../types';
 
 export type { UserProfile, UserRole, UserPermissions };
@@ -14,6 +15,7 @@ interface AuthContextType {
   isAdmin: boolean;
   isSuperAdmin: boolean;
   hasPermission: (permission: string) => boolean;
+  refreshSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -26,6 +28,7 @@ const AuthContext = createContext<AuthContextType>({
   isAdmin: false,
   isSuperAdmin: false,
   hasPermission: () => false,
+  refreshSession: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -85,6 +88,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     verifySession();
   }, [verifySession]);
 
+  // Real-time SSE profile and permissions stream
+  useSSE({
+    endpoint: '/sse/profile',
+    eventName: 'profile_update',
+    enabled: !!user,
+    fallbackIntervalMs: 15000,
+    onMessage: (profileData: any) => {
+      if (profileData && profileData.uid) {
+        setUser((prev) => {
+          if (!prev) return profileData;
+          // Sync if permissions, role, status or photo changed
+          if (
+            JSON.stringify(prev.permissions) !== JSON.stringify(profileData.permissions) ||
+            prev.role !== profileData.role ||
+            prev.status !== profileData.status ||
+            prev.name !== profileData.name
+          ) {
+            return { ...prev, ...profileData };
+          }
+          return prev;
+        });
+      }
+    },
+  });
+
+  // Cross-tab synchronization via BroadcastChannel
+  useEffect(() => {
+    let channel: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        channel = new BroadcastChannel('qep_auth_channel');
+        channel.onmessage = (event) => {
+          if (event.data?.type === 'PERMISSIONS_UPDATED' || event.data?.type === 'AUTH_STATE_CHANGED') {
+            if (!event.data.userId || String(event.data.userId) === String(user?.uid)) {
+              verifySession();
+            }
+          }
+        };
+      }
+    } catch {
+      // Ignore in unsupported environments
+    }
+
+    return () => {
+      channel?.close();
+    };
+  }, [user?.uid, verifySession]);
+
   // Multi-tab sync & Page Visibility: re-verify session when tab becomes visible
   useEffect(() => {
     const handleVisibility = () => {
@@ -97,7 +148,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [verifySession]);
 
-  // Poll account status periodically to enforce server-side suspensions immediately
+  // Poll account status periodically as safety net
   useEffect(() => {
     if (!user) return;
 
@@ -114,14 +165,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } catch (err: any) {
         // ONLY sign out if explicitly 401 Unauthorized (session revoked or suspended)
-        // NEVER sign out on 429 (Too Many Requests), 5xx, or temporary network drops
         if (err?.status === 401) {
           await signOut();
         }
       }
     };
 
-    const interval = setInterval(checkStatus, 60000); // Check every 60s
+    const interval = setInterval(checkStatus, 15000); // Check every 15s
     return () => clearInterval(interval);
   }, [user, signOut]);
 
@@ -133,7 +183,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     (permission: string): boolean => {
       if (!user) return false;
       if (user.role === 'super_admin' || user.role === 'admin') return true;
-      return !!user.permissions?.[permission];
+      if (!user.permissions) return false;
+
+      // Direct check
+      if (user.permissions[permission] !== undefined) {
+        return !!user.permissions[permission];
+      }
+
+      // Check common alias translations
+      const aliases: Record<string, string[]> = {
+        manageOrders: ['orders.view', 'orders.create', 'orders.update_status'],
+        manageInventory: ['inventory.view', 'inventory.adjust'],
+        manageMenu: ['menu.view', 'menu.create', 'menu.edit'],
+        manageReports: ['reports.view', 'reports.export'],
+        manageCMS: ['cms.view', 'cms.edit'],
+        manageNotifications: ['notifications.view', 'notifications.manage'],
+        manageStaff: ['staff.view', 'staff.manage_permissions'],
+        viewDashboard: ['reports.view', 'orders.view', 'dashboard.view'],
+      };
+
+      if (aliases[permission]) {
+        return aliases[permission].some((k) => !!user.permissions[k]);
+      }
+
+      return false;
     },
     [user]
   );
@@ -150,6 +223,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAdmin,
         isSuperAdmin,
         hasPermission,
+        refreshSession: verifySession,
       }}
     >
       {children}

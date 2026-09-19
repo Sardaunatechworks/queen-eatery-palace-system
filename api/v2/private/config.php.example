@@ -1,0 +1,67 @@
+<?php
+/**
+ * Queen's Palace Eatery & Event Hall - V2 Configuration Example
+ *
+ * Copy this file to config.php and fill in your environment values.
+ * Place at: api/v2/private/config.php (dev) or /private/config.php (production)
+ */
+
+return [
+    'app' => [
+        'name'  => "Queen's Palace Eatery & Event Hall",
+        'url'   => 'https://yourdomain.com',
+        'debug' => false,
+    ],
+
+    'db' => [
+        'host'     => 'localhost',
+        'port'     => '3306',
+        'name'     => 'queen_eatery_v2',
+        'user'     => 'root',
+        'password' => '',
+        'charset'  => 'utf8mb4',
+    ],
+
+    'jwt' => [
+        'secret'      => 'CHANGE_THIS_TO_A_RANDOM_64_CHAR_STRING',
+        'access_ttl'  => 900,     // 15 minutes
+        'refresh_ttl' => 604800,  // 7 days
+        'algorithm'   => 'HS256',
+        'issuer'      => 'queens-palace-api',
+    ],
+
+    'paystack' => [
+        'secret_key' => 'sk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+        'public_key' => 'pk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    ],
+
+    'mail' => [
+        'host'       => 'smtp.example.com',
+        'port'       => 587,
+        'username'   => 'noreply@yourdomain.com',
+        'password'   => '',
+        'from_email' => 'noreply@yourdomain.com',
+        'from_name'  => "Queen's Palace Eatery",
+        'encryption' => 'tls',
+    ],
+
+    'cors' => [
+        'allowed_origins' => [
+            'http://localhost:3000',
+            'http://localhost:5173',
+            'https://yourdomain.com',
+        ],
+    ],
+
+    'uploads' => [
+        'base_path' => dirname(__DIR__, 2) . '/uploads',
+        'base_url'  => '/uploads',
+        'max_size'  => 5242880, // 5MB
+    ],
+
+    'rate_limit' => [
+        'enabled'     => true,
+        'max_requests' => 100,
+        'window_seconds' => 60,
+    ],
+];

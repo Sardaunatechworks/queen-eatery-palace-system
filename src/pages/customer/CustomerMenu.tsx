@@ -164,6 +164,18 @@ export const CustomerMenu: React.FC = () => {
   useEffect(() => {
     fetchMenu();
     getTakeawayPackPrice().then((price) => setPackUnitPrice(price));
+
+    try {
+      const invChannel = new BroadcastChannel("qep_inventory_channel");
+      invChannel.onmessage = (event) => {
+        if (event.data?.type === "STOCK_UPDATED" || event.data?.type === "MENU_UPDATED") {
+          fetchMenu();
+        }
+      };
+      return () => {
+        invChannel.close();
+      };
+    } catch {}
   }, []);
 
   const filteredMenu = useMemo(() => {

@@ -1,0 +1,19 @@
+RewriteEngine On
+RewriteBase /
+
+# Security: Block access to private directory and sensitive files
+RewriteRule ^private/ - [F,L]
+RewriteRule \.(sql|env|log|bak|dump)$ - [F,L]
+
+# Route all requests to index.php
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]
+
+# Security Headers
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>

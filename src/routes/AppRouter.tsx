@@ -99,7 +99,7 @@ export const AppRouter: React.FC = () => {
         <Route
           path="/admin/*"
           element={
-            <ProtectedRoute allowedRoles={['super_admin', 'admin']}>
+            <ProtectedRoute allowedRoles={['super_admin', 'admin', 'cashier', 'kitchen']}>
               <AdminDashboard />
             </ProtectedRoute>
           }

@@ -53,11 +53,11 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   if (!isOpen || !order) return null;
 
   // Order Calculations
-  const orderRef = order.orderId || (order.id ? String(order.id).slice(0, 8) : 'QEP-00000');
+  const orderRef = order.orderId || order.order_number || (order.id ? String(order.id).slice(0, 8) : 'QEP-00000');
   const foodSubtotal = Number(
     order.subtotal ??
       (order.items?.reduce(
-        (s: number, i: any) => s + Number(i.price ?? 0) * Number(i.quantity ?? 1),
+        (s: number, i: any) => s + Number(i.unit_price ?? i.price ?? 0) * Number(i.quantity ?? 1),
         0
       ) ?? 0)
   );
@@ -73,7 +73,8 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
       if (order.createdAt?.toDate) {
         return format(order.createdAt.toDate(), 'dd/MM/yyyy h:mm a');
       }
-      const date = order.createdAt ? new Date(order.createdAt) : new Date();
+      const dateVal = order.created_at || order.createdAt;
+      const date = dateVal ? new Date(typeof dateVal === 'string' ? dateVal.replace(/-/g, '/') : dateVal) : new Date();
       return isNaN(date.getTime())
         ? format(new Date(), 'dd/MM/yyyy h:mm a')
         : format(date, 'dd/MM/yyyy h:mm a');
@@ -82,8 +83,8 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     }
   })();
 
-  const staffName = order.cashierName || 'Palace Attendant';
-  const paymentMode = order.paymentMethod || 'Direct';
+  const staffName = order.cashierName || order.cashier_name || 'Palace Attendant';
+  const paymentMode = order.paymentMethod || order.payment_method || 'Direct';
 
   // Generate plain text receipt for WhatsApp and Clipboard
   const generateReceiptText = () => {
@@ -91,7 +92,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
       order.items
         ?.map(
           (i: any) =>
-            `• ${i.quantity}x ${i.name} — ${formatNaira(Number(i.price ?? 0) * Number(i.quantity ?? 1))}`
+            `• ${i.quantity || 1}x ${i.name || i.item_name || 'Item'} — ${formatNaira(Number(i.unit_price ?? i.price ?? 0) * Number(i.quantity ?? 1))}`
         )
         .join('\n') || '• 1x Palace Order';
 
@@ -244,11 +245,11 @@ ${order.deliveryType === 'delivery' && order.address ? `📍 *Delivery Address:*
         : 'Pickup / Counter Sale';
 
     const itemRows = (order.items ?? []).map((item: any) => {
-      const unitPrice = Number(item.price ?? 0);
+      const unitPrice = Number(item.unit_price ?? item.price ?? 0);
       const qty = Number(item.quantity ?? 1);
       const lineTotal = unitPrice * qty;
       return `<tr>
-        <td class="item-name">${item.name ?? 'Order Item'}</td>
+        <td class="item-name">${item.name ?? item.item_name ?? 'Order Item'}</td>
         <td class="item-qty">${qty}&nbsp;&times;&nbsp;${formatNaira(unitPrice)}</td>
         <td class="amount">${formatNaira(lineTotal)}</td>
       </tr>`;
@@ -709,19 +710,23 @@ ${order.deliveryType === 'delivery' && order.address ? `📍 *Delivery Address:*
                 <span>Amount</span>
               </div>
               <div className="space-y-2.5">
-                {order.items?.map((item: any, idx: number) => (
-                  <div key={idx} className="flex justify-between items-start text-xs sm:text-[13px]">
-                    <div className="flex-1 pr-3">
-                      <p className="font-bold text-stone-900 leading-snug">{item.name}</p>
-                      <p className="text-[10px] text-stone-400 font-medium mt-0.5">
-                        {item.quantity} × {formatNaira(Number(item.price ?? 0))}
+                {order.items?.map((item: any, idx: number) => {
+                  const unitPrice = Number(item.unit_price ?? item.price ?? 0);
+                  const qty = Number(item.quantity ?? 1);
+                  return (
+                    <div key={idx} className="flex justify-between items-start text-xs sm:text-[13px]">
+                      <div className="flex-1 pr-3">
+                        <p className="font-bold text-stone-900 leading-snug">{item.name || item.item_name || 'Order Item'}</p>
+                        <p className="text-[10px] text-stone-400 font-medium mt-0.5">
+                          {qty} × {formatNaira(unitPrice)}
+                        </p>
+                      </div>
+                      <p className="font-bold text-stone-900 tabular-nums">
+                        {formatNaira(unitPrice * qty)}
                       </p>
                     </div>
-                    <p className="font-bold text-stone-900 tabular-nums">
-                      {formatNaira(Number(item.price ?? 0) * Number(item.quantity ?? 1))}
-                    </p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

@@ -10,12 +10,16 @@ import {
   CheckCircle2,
   Wallet,
   CreditCard,
+  ArrowRightLeft,
   Bell,
   ChefHat,
   Package,
   Volume2,
   VolumeX,
   Volume1,
+  Printer,
+  Search,
+  X,
 } from "lucide-react";
 import { MenuItem } from "../admin/MenuManagement";
 import { formatNaira } from "../../utils/format";
@@ -24,7 +28,7 @@ import { ReceiptModal } from "../../components/ReceiptModal";
 import { OrderAcceptanceModal } from "../../components/OrderAcceptanceModal";
 import { format } from "date-fns";
 import { getMenuItems } from "../../services/menuService";
-import { getActiveOrders, updateOrderStatus, createOrder, acceptOrder, rejectOrder, normalizeOrder } from "../../services/orderService";
+import { getOrders, getActiveOrders, updateOrderStatus, createOrder, acceptOrder, rejectOrder, normalizeOrder } from "../../services/orderService";
 import { SearchInput } from "../../components/ui/Input";
 import { Badge } from "../../components/ui";
 import { Button } from "../../components/ui/Button";
@@ -43,7 +47,7 @@ export const CashierTerminal: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "paystack">("cash");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "pos" | "transfer">("cash");
   const [selectedPendingOrder, setSelectedPendingOrder] = useState<any>(null);
   const [packUnitPrice, setPackUnitPrice] = useState<number>(300);
   const [packagingQty, setPackagingQty] = useState<number>(0);
@@ -57,6 +61,26 @@ export const CashierTerminal: React.FC = () => {
   // Receipt State
   const [showReceipt, setShowReceipt] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<any>(null);
+
+  // Unlimited Reprint State
+  const [showReprintModal, setShowReprintModal] = useState(false);
+  const [pastOrders, setPastOrders] = useState<any[]>([]);
+  const [loadingPastOrders, setLoadingPastOrders] = useState(false);
+  const [reprintSearchTerm, setReprintSearchTerm] = useState("");
+  const [reprintFilter, setReprintFilter] = useState<"all" | "today" | "paid">("all");
+  const [selectedReceiptOrder, setSelectedReceiptOrder] = useState<any>(null);
+
+  const fetchPastOrders = useCallback(async () => {
+    setLoadingPastOrders(true);
+    try {
+      const res = await getOrders({ limit: 100 });
+      setPastOrders(res.items || []);
+    } catch (err: any) {
+      showToast(err.message || "Failed to load past orders for reprint", "error");
+    } finally {
+      setLoadingPastOrders(false);
+    }
+  }, [showToast]);
 
   const { setLoading: setGlobalLoading, showToast } = useUI();
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -198,6 +222,10 @@ export const CashierTerminal: React.FC = () => {
   };
 
   const isAwaitingCashier = (o: any) => {
+    // Orders placed directly by cashier at the POS counter are already confirmed and accepted, never incoming
+    if (o.source === "cashier") {
+      return false;
+    }
     // Online customer orders MUST be paid and verified before cashier receives them!
     const isOnline = o.source === "online_customer" || o.source === "customer";
     if (isOnline && o.payment_status !== "paid" && o.paymentStatus !== "paid") {
@@ -267,20 +295,39 @@ export const CashierTerminal: React.FC = () => {
 
   useEffect(() => {
     fetchMenu();
+
+    // Listen to real-time inventory updates from Kitchen or Admin across tabs
+    try {
+      const invChannel = new BroadcastChannel("qep_inventory_channel");
+      invChannel.onmessage = (event) => {
+        if (event.data?.type === "STOCK_UPDATED" || event.data?.type === "MENU_UPDATED") {
+          fetchMenu();
+        }
+      };
+      return () => {
+        invChannel.close();
+      };
+    } catch {}
   }, []);
 
   const handleCashierSSE = useCallback(
     (orders: any[]) => {
       processIncomingOrders(orders);
+      fetchMenu();
     },
     [processIncomingOrders]
   );
+
+  const handleFallbackPoll = useCallback(() => {
+    fetchIncomingOrders();
+    fetchMenu();
+  }, []);
 
   useSSE({
     endpoint: "/sse/orders",
     eventName: "orders_update",
     onMessage: handleCashierSSE,
-    fallbackPoll: fetchIncomingOrders,
+    fallbackPoll: handleFallbackPoll,
     fallbackIntervalMs: 8000,
   });
 
@@ -322,6 +369,17 @@ export const CashierTerminal: React.FC = () => {
     );
   };
 
+  const setExactQuantity = (id: string | number, qty: number) => {
+    setCart((prev) =>
+      prev.map((i) => {
+        if (i.item.id === id) {
+          return { ...i, quantity: Math.max(1, qty) };
+        }
+        return i;
+      })
+    );
+  };
+
   const removeFromCart = (id: string | number) => {
     const item = cart.find((i) => i.item.id === id);
     setCart((prev) => prev.filter((i) => i.item.id !== id));
@@ -356,6 +414,26 @@ export const CashierTerminal: React.FC = () => {
         packaging_quantity: packagingQty,
         source: "cashier",
       });
+
+      // Suppress incoming alert chime on this terminal and notify across tabs/windows
+      if (result.id) {
+        alertedOrderIds.current.add(String(result.id));
+        sessionStorage.setItem(
+          "qep_cashier_alerted_orders",
+          JSON.stringify(Array.from(alertedOrderIds.current))
+        );
+        try {
+          const channel = new BroadcastChannel("qep_orders_channel");
+          channel.postMessage({
+            type: "CASHIER_ORDER_CREATED",
+            orderId: result.id,
+            orderNumber: result.orderNumber,
+          });
+          channel.close();
+        } catch {
+          // ignore BroadcastChannel errors in unsupported environments
+        }
+      }
 
       setCompletedOrder({
         id: result.id,
@@ -393,6 +471,39 @@ export const CashierTerminal: React.FC = () => {
     setActiveTab(tab);
     if (tab === "incoming") setUnreadCount(0);
   };
+
+  const filteredPastOrders = useMemo(() => {
+    return pastOrders.filter((order) => {
+      if (reprintFilter === "today") {
+        let d: Date;
+        if (order.createdAt?.toDate) {
+          d = order.createdAt.toDate();
+        } else if (order.created_at) {
+          d = new Date(String(order.created_at).replace(/-/g, "/"));
+        } else {
+          d = new Date();
+        }
+        const today = new Date();
+        if (
+          d.getDate() !== today.getDate() ||
+          d.getMonth() !== today.getMonth() ||
+          d.getFullYear() !== today.getFullYear()
+        ) {
+          return false;
+        }
+      } else if (reprintFilter === "paid") {
+        const pStatus = (order.payment_status || order.paymentStatus || "").toLowerCase();
+        if (pStatus !== "paid") return false;
+      }
+
+      if (!reprintSearchTerm.trim()) return true;
+      const term = reprintSearchTerm.toLowerCase();
+      const orderNum = (order.order_number || order.orderId || order.orderNumber || "").toLowerCase();
+      const cust = (order.customer_name || order.customerName || order.guest_name || "").toLowerCase();
+      const table = (order.table_number || "").toLowerCase();
+      return orderNum.includes(term) || cust.includes(term) || table.includes(term);
+    });
+  }, [pastOrders, reprintFilter, reprintSearchTerm]);
 
   if (loading) {
     return (
@@ -438,8 +549,22 @@ export const CashierTerminal: React.FC = () => {
           </button>
         </div>
 
-        {/* Right Tools: Audio volume & search */}
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+        {/* Right Tools: Reprint Receipts, Audio volume & search */}
+        <div className="flex items-center gap-2.5 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
+          {/* Reprint Receipts Action Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setShowReprintModal(true);
+              fetchPastOrders();
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-stone-800 text-xs font-semibold shadow-xs transition-colors"
+            title="Search and reprint any previous customer receipt at any time"
+          >
+            <Printer size={14} className="text-[#8B1E1E]" />
+            <span>Reprint Receipts</span>
+          </button>
+
           {/* Audio Beeper Control */}
           <div className="flex items-center gap-2 bg-stone-50 px-2.5 py-1.5 rounded-lg border border-stone-200 text-xs">
             <button
@@ -602,16 +727,26 @@ export const CashierTerminal: React.FC = () => {
                         type="button"
                         onClick={() => updateQuantity(item.id, -1)}
                         className="w-6 h-6 bg-stone-100 border border-stone-200 rounded flex items-center justify-center hover:bg-stone-200 transition-colors"
+                        title="Decrease quantity"
                       >
                         <Minus size={11} className="text-stone-700" />
                       </button>
-                      <span className="text-xs font-semibold text-stone-900 w-5 text-center font-mono">
-                        {quantity}
-                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={quantity === 0 ? "" : quantity}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          setExactQuantity(item.id, isNaN(val) ? 1 : val);
+                        }}
+                        className="w-10 h-6 text-center text-xs font-semibold text-stone-900 font-mono bg-white border border-stone-300 rounded focus:outline-none focus:border-[#8B1E1E]"
+                        title="Enter item quantity"
+                      />
                       <button
                         type="button"
                         onClick={() => updateQuantity(item.id, 1)}
                         className="w-6 h-6 bg-stone-100 border border-stone-200 rounded flex items-center justify-center hover:bg-stone-200 transition-colors"
+                        title="Increase quantity"
                       >
                         <Plus size={11} className="text-stone-700" />
                       </button>
@@ -697,13 +832,13 @@ export const CashierTerminal: React.FC = () => {
               </div>
 
               {/* Payment Method Switcher */}
-              <div className="grid grid-cols-2 gap-2 pt-1">
+              <div className="grid grid-cols-3 gap-1.5 pt-1">
                 <button
                   type="button"
                   onClick={() => setPaymentMethod("cash")}
                   className={`h-9 border rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
                     paymentMethod === "cash"
-                      ? "bg-stone-900 text-white border-stone-900"
+                      ? "bg-stone-900 text-white border-stone-900 shadow-xs"
                       : "bg-white text-stone-700 border-stone-300 hover:bg-stone-50"
                   }`}
                 >
@@ -711,14 +846,25 @@ export const CashierTerminal: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setPaymentMethod("paystack")}
+                  onClick={() => setPaymentMethod("pos")}
                   className={`h-9 border rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
-                    paymentMethod === "paystack"
-                      ? "bg-stone-900 text-white border-stone-900"
+                    paymentMethod === "pos"
+                      ? "bg-stone-900 text-white border-stone-900 shadow-xs"
                       : "bg-white text-stone-700 border-stone-300 hover:bg-stone-50"
                   }`}
                 >
-                  <CreditCard size={13} /> Card / Transfer
+                  <CreditCard size={13} /> POS
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("transfer")}
+                  className={`h-9 border rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
+                    paymentMethod === "transfer"
+                      ? "bg-stone-900 text-white border-stone-900 shadow-xs"
+                      : "bg-white text-stone-700 border-stone-300 hover:bg-stone-50"
+                  }`}
+                >
+                  <ArrowRightLeft size={13} /> Transfer
                 </button>
               </div>
 
@@ -898,6 +1044,224 @@ export const CashierTerminal: React.FC = () => {
             }
           }}
           onClose={() => setSelectedPendingOrder(null)}
+        />
+      )}
+
+      {/* Unlimited Past Orders Reprint Modal */}
+      {showReprintModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl border border-stone-200 max-w-4xl w-full flex flex-col max-h-[88vh] animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-stone-200 flex items-center justify-between bg-stone-50/70 rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#8B1E1E]/10 flex items-center justify-center text-[#8B1E1E]">
+                  <Printer size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-stone-900">Reprint Past Receipts</h3>
+                  <p className="text-xs text-stone-500">
+                    Search and reprint customer receipts for any past order at any time without limit.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowReprintModal(false)}
+                className="p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 rounded-lg transition-colors"
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Filter & Search Controls */}
+            <div className="p-4 border-b border-stone-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white">
+              {/* Search bar */}
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={15} />
+                <input
+                  type="text"
+                  placeholder="Search by order #, customer, table..."
+                  value={reprintSearchTerm}
+                  onChange={(e) => setReprintSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-xs bg-stone-50 border border-stone-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#8B1E1E] focus:border-[#8B1E1E]"
+                />
+                {reprintSearchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setReprintSearchTerm("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+
+              {/* Quick Filter buttons */}
+              <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                <div className="inline-flex p-0.5 rounded-lg bg-stone-100 border border-stone-200 text-xs font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setReprintFilter("all")}
+                    className={`px-3 py-1.5 rounded-md transition-colors ${
+                      reprintFilter === "all"
+                        ? "bg-white text-stone-900 shadow-xs font-semibold"
+                        : "text-stone-600 hover:text-stone-900"
+                    }`}
+                  >
+                    All Orders
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReprintFilter("today")}
+                    className={`px-3 py-1.5 rounded-md transition-colors ${
+                      reprintFilter === "today"
+                        ? "bg-white text-stone-900 shadow-xs font-semibold"
+                        : "text-stone-600 hover:text-stone-900"
+                    }`}
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReprintFilter("paid")}
+                    className={`px-3 py-1.5 rounded-md transition-colors ${
+                      reprintFilter === "paid"
+                        ? "bg-white text-stone-900 shadow-xs font-semibold"
+                        : "text-stone-600 hover:text-stone-900"
+                    }`}
+                  >
+                    Paid
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchPastOrders}
+                  className="p-2 border border-stone-200 bg-stone-50 hover:bg-stone-100 rounded-lg text-stone-600 text-xs font-medium transition-colors"
+                  title="Refresh orders list"
+                >
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            {/* Orders List / Table */}
+            <div className="flex-1 overflow-y-auto min-h-[300px]">
+              {loadingPastOrders ? (
+                <div className="py-20 flex flex-col items-center justify-center">
+                  <div className="w-7 h-7 border-2 border-[#8B1E1E] border-t-transparent rounded-full animate-spin mb-2" />
+                  <p className="text-xs text-stone-500 font-medium">Loading orders history...</p>
+                </div>
+              ) : filteredPastOrders.length === 0 ? (
+                <div className="py-16 text-center text-stone-400">
+                  <Printer size={36} className="mx-auto mb-2 text-stone-300" />
+                  <p className="text-xs font-semibold text-stone-600">No matching orders found</p>
+                  <p className="text-[11px] text-stone-400 mt-1">Try adjusting your search query or filter criteria.</p>
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="sticky top-0 bg-stone-50 border-b border-stone-200 text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                    <tr>
+                      <th className="px-4 py-2.5">Order #</th>
+                      <th className="px-4 py-2.5">Date & Time</th>
+                      <th className="px-4 py-2.5">Customer / Table</th>
+                      <th className="px-4 py-2.5">Items</th>
+                      <th className="px-4 py-2.5">Amount</th>
+                      <th className="px-4 py-2.5">Payment</th>
+                      <th className="px-4 py-2.5 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100 text-stone-700">
+                    {filteredPastOrders.map((ord: any) => {
+                      let dateStr = "—";
+                      try {
+                        const d = ord.createdAt?.toDate ? ord.createdAt.toDate() : new Date(String(ord.created_at || ord.createdAt).replace(/-/g, "/"));
+                        dateStr = format(d, "MMM d, h:mm a");
+                      } catch {
+                        dateStr = String(ord.created_at || "");
+                      }
+
+                      const orderIdDisplay = ord.order_number || ord.orderNumber || ord.orderId || `#${ord.id}`;
+                      const customerDisplay = ord.customer_name || ord.customerName || ord.guest_name || (ord.table_number ? `Table ${ord.table_number}` : "Counter Customer");
+                      const itemsCount = ord.items?.length || 0;
+                      const totalVal = Number(ord.total ?? ord.total_amount ?? 0);
+                      const isPaid = (ord.payment_status || ord.paymentStatus) === "paid";
+                      const pMethod = ord.payment_method || ord.paymentMethod || "cash";
+
+                      return (
+                        <tr key={ord.id} className="hover:bg-stone-50/80 transition-colors">
+                          <td className="px-4 py-3 font-mono font-bold text-stone-900">
+                            {orderIdDisplay}
+                          </td>
+                          <td className="px-4 py-3 text-stone-500 whitespace-nowrap">
+                            {dateStr}
+                          </td>
+                          <td className="px-4 py-3 font-medium text-stone-800">
+                            <div>{customerDisplay}</div>
+                            {ord.table_number && (
+                              <span className="text-[10px] text-stone-400">Table {ord.table_number}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-stone-500">
+                            <span className="px-2 py-0.5 rounded-md bg-stone-100 border border-stone-200 text-[11px] font-medium">
+                              {itemsCount} {itemsCount === 1 ? "item" : "items"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 font-bold text-stone-900 font-mono whitespace-nowrap">
+                            {formatNaira(totalVal)}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                isPaid
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  : "bg-amber-50 text-amber-700 border border-amber-200"
+                              }`}
+                            >
+                              {isPaid ? "Paid" : "Unpaid"} • {pMethod}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedReceiptOrder(ord)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#8B1E1E] hover:bg-[#721818] text-white text-xs font-semibold rounded-lg shadow-xs transition-colors"
+                              title="Print or view receipt for this order"
+                            >
+                              <Printer size={13} />
+                              <span>Reprint</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 bg-stone-50 border-t border-stone-200 flex items-center justify-between text-xs text-stone-500 rounded-b-2xl">
+              <span>Showing {filteredPastOrders.length} order{filteredPastOrders.length === 1 ? "" : "s"}</span>
+              <button
+                type="button"
+                onClick={() => setShowReprintModal(false)}
+                className="px-4 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-100 text-stone-700 font-medium transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Selected Past Order Receipt Modal */}
+      {selectedReceiptOrder && (
+        <ReceiptModal
+          isOpen={Boolean(selectedReceiptOrder)}
+          mode="cashier"
+          order={selectedReceiptOrder}
+          onClose={() => setSelectedReceiptOrder(null)}
         />
       )}
     </div>

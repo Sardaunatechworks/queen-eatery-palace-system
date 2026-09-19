@@ -3,8 +3,9 @@ import { format } from "date-fns";
 import { formatNaira } from "../../utils/format";
 import { useUI } from "../../context/UIContext";
 import { useVisibilityPolling } from "../../hooks/useVisibilityPolling";
-import { Receipt, Truck, ShoppingBag, Utensils, CheckCircle2, XCircle, CreditCard, Banknote } from "lucide-react";
+import { Receipt, Truck, ShoppingBag, Utensils, CheckCircle2, XCircle, CreditCard, Banknote, Printer } from "lucide-react";
 import { OrderAcceptanceModal } from "../../components/OrderAcceptanceModal";
+import { ReceiptModal } from "../../components/ReceiptModal";
 import { useAuth } from "../../context/AuthContext";
 import type { Order } from "../../types";
 import {
@@ -28,6 +29,7 @@ export const OrdersView: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState("active");
   const [sourceFilter, setSourceFilter] = useState<"all" | "online" | "pos" | "qr">("all");
   const [selectedPendingOrder, setSelectedPendingOrder] = useState<Order | null>(null);
+  const [selectedReceiptOrder, setSelectedReceiptOrder] = useState<Order | null>(null);
   const { showToast, setLoading: setGlobalLoading } = useUI();
   const { profile } = useAuth();
 
@@ -522,8 +524,21 @@ export const OrdersView: React.FC = () => {
                             </button>
                           )}
 
+                          <button
+                            type="button"
+                            onClick={() => setSelectedReceiptOrder(order)}
+                            className="p-1.5 text-stone-500 hover:text-[#8B1E1E] hover:bg-stone-100 rounded-lg transition-colors"
+                            title="Print / Reprint Receipt"
+                          >
+                            <Printer size={15} />
+                          </button>
+
                           <ActionDropdown 
                             items={[
+                              {
+                                label: 'Print / Reprint Receipt',
+                                onClick: () => setSelectedReceiptOrder(order),
+                              },
                               ...(isSubmitted ? [
                                 { label: 'Accept Order (To Kitchen)', onClick: () => handleAccept(order.id) },
                                 { label: 'Reject Order', onClick: () => handleReject(order.id), danger: true },
@@ -570,6 +585,16 @@ export const OrdersView: React.FC = () => {
              setSelectedPendingOrder(null);
           }}
           onClose={() => setSelectedPendingOrder(null)}
+        />
+      )}
+
+      {/* Print / Reprint Receipt Modal */}
+      {selectedReceiptOrder && (
+        <ReceiptModal
+          isOpen={Boolean(selectedReceiptOrder)}
+          mode="cashier"
+          order={selectedReceiptOrder}
+          onClose={() => setSelectedReceiptOrder(null)}
         />
       )}
     </div>

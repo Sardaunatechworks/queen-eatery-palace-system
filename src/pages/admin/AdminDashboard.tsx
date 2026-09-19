@@ -27,12 +27,32 @@ const LoadingFallback = () => (
 const hasPermission = (profile: any, permissionKey: string | number) => {
   if (!profile) return false;
   if (profile.role === "super_admin" || profile.role === "admin") return true;
-  if (profile.permissions) {
-    if (Array.isArray(profile.permissions)) {
-      return profile.permissions.includes(permissionKey);
-    }
-    return !!profile.permissions[permissionKey];
+  if (!profile.permissions) return false;
+
+  if (Array.isArray(profile.permissions)) {
+    return profile.permissions.includes(permissionKey);
   }
+
+  const keyStr = String(permissionKey);
+  if (profile.permissions[keyStr] !== undefined) {
+    return !!profile.permissions[keyStr];
+  }
+
+  const aliases: Record<string, string[]> = {
+    manageOrders: ['orders.view', 'orders.create', 'orders.update_status'],
+    manageInventory: ['inventory.view', 'inventory.adjust'],
+    manageMenu: ['menu.view', 'menu.create', 'menu.edit'],
+    manageReports: ['reports.view', 'reports.export'],
+    manageCMS: ['cms.view', 'cms.edit'],
+    manageNotifications: ['notifications.view', 'notifications.manage'],
+    manageStaff: ['staff.view', 'staff.manage_permissions'],
+    viewDashboard: ['reports.view', 'orders.view', 'dashboard.view'],
+  };
+
+  if (aliases[keyStr]) {
+    return aliases[keyStr].some((k) => !!profile.permissions[k]);
+  }
+
   return false;
 };
 
@@ -66,12 +86,34 @@ const PermissionRoute = ({ permissionKey, children }: { permissionKey: string | 
   return <AccessDenied />;
 };
 
+const adminNavigation = [
+  { name: "Overview", path: "/admin/overview", icon: LayoutDashboard, permission: "viewDashboard" as keyof UserPermissions },
+  { name: "Staff Management", path: "/admin/staff", icon: Users, permission: "manageStaff" as keyof UserPermissions },
+  { name: "Menu", path: "/admin/menu", icon: UtensilsCrossed, permission: "manageMenu" as keyof UserPermissions },
+  { name: "Inventory", path: "/admin/inventory", icon: Boxes, permission: "manageInventory" as keyof UserPermissions },
+  { name: "Tables & QR", path: "/admin/tables", icon: QrCode, permission: "manageOrders" as keyof UserPermissions },
+  { name: "Orders", path: "/admin/orders", icon: Receipt, permission: "manageOrders" as keyof UserPermissions },
+  { name: "Reports", path: "/admin/reports", icon: BarChart3, permission: "manageReports" as keyof UserPermissions },
+  { name: "CMS Management", path: "/admin/cms", icon: FileText, permission: "manageCMS" as keyof UserPermissions },
+  { name: "Event Hall", path: "/admin/event-hall", icon: Calendar, permission: "manageCMS" as keyof UserPermissions },
+  { name: "Profile", path: "/admin/profile", icon: User, permission: "viewDashboard" as keyof UserPermissions },
+];
+
 const AdminRootRedirect = () => {
   const { profile } = useAuth();
   if (!profile) return <Navigate to="/login" replace />;
 
   if (profile.role === "super_admin" || profile.role === "admin") {
     return <Navigate to="/admin/overview" replace />;
+  }
+
+  // Check for any accessible admin navigation module
+  const firstAccessible = adminNavigation.find(
+    (item) => item.path !== "/admin/profile" && hasPermission(profile, item.permission)
+  );
+
+  if (firstAccessible) {
+    return <Navigate to={firstAccessible.path} replace />;
   }
 
   switch (profile.role) {
@@ -81,19 +123,6 @@ const AdminRootRedirect = () => {
     default: return <Navigate to="/" replace />;
   }
 };
-
-const adminNavigation = [
-  { name: "Overview", path: "/admin/overview", icon: LayoutDashboard, permission: "viewDashboard" as keyof UserPermissions },
-  { name: "Staff Management", path: "/admin/staff", icon: Users, permission: "manageStaff" as keyof UserPermissions },
-  { name: "Menu", path: "/admin/menu", icon: UtensilsCrossed, permission: "manageMenu" as keyof UserPermissions },
-  { name: "Inventory", path: "/admin/inventory", icon: Boxes, permission: "manageMenu" as keyof UserPermissions },
-  { name: "Tables & QR", path: "/admin/tables", icon: QrCode, permission: "manageOrders" as keyof UserPermissions },
-  { name: "Orders", path: "/admin/orders", icon: Receipt, permission: "manageOrders" as keyof UserPermissions },
-  { name: "Reports", path: "/admin/reports", icon: BarChart3, permission: "manageReports" as keyof UserPermissions },
-  { name: "CMS Management", path: "/admin/cms", icon: FileText, permission: "manageCMS" as keyof UserPermissions },
-  { name: "Event Hall", path: "/admin/event-hall", icon: Calendar, permission: "manageCMS" as keyof UserPermissions },
-  { name: "Profile", path: "/admin/profile", icon: User, permission: "viewDashboard" as keyof UserPermissions },
-];
 
 export const AdminDashboard: React.FC = () => {
   const { profile } = useAuth();
@@ -111,7 +140,7 @@ export const AdminDashboard: React.FC = () => {
             <Route path="/overview" element={<PermissionRoute permissionKey="viewDashboard"><AdminOverview /></PermissionRoute>} />
             <Route path="/staff" element={<PermissionRoute permissionKey="manageStaff"><StaffManagement /></PermissionRoute>} />
             <Route path="/menu" element={<PermissionRoute permissionKey="manageMenu"><MenuManagement /></PermissionRoute>} />
-            <Route path="/inventory" element={<PermissionRoute permissionKey="manageMenu"><InventoryManagement /></PermissionRoute>} />
+            <Route path="/inventory" element={<PermissionRoute permissionKey="manageInventory"><InventoryManagement /></PermissionRoute>} />
             <Route path="/tables" element={<PermissionRoute permissionKey="manageOrders"><TableManagement /></PermissionRoute>} />
             <Route path="/orders" element={<PermissionRoute permissionKey="manageOrders"><OrdersView /></PermissionRoute>} />
             <Route path="/reports" element={<PermissionRoute permissionKey="manageReports"><Reports /></PermissionRoute>} />

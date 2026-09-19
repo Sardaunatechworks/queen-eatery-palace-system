@@ -2,17 +2,19 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { apiClient } from "../../services/apiClient";
 import { Order } from "../admin/OrdersView";
 import { format, isToday } from "date-fns";
-import { Search, Filter, Receipt, Clock, CheckCircle, XCircle, Timer, AlertCircle, TrendingUp, ShoppingBag, CreditCard, Box } from "lucide-react";
+import { Search, Filter, Receipt, Clock, CheckCircle, XCircle, Timer, AlertCircle, TrendingUp, ShoppingBag, CreditCard, Box, Printer } from "lucide-react";
 import { formatNaira } from "../../utils/format";
 import { useUI } from "../../context/UIContext";
 import { useVisibilityPolling } from "../../hooks/useVisibilityPolling";
 import { cn } from "../../utils/cn";
+import { ReceiptModal } from "../../components/ReceiptModal";
 
 export const CashierTransactions: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [selectedReceiptOrder, setSelectedReceiptOrder] = useState<any>(null);
   const { showToast, setLoading: setGlobalLoading } = useUI();
 
   const fetchOrders = async () => {
@@ -231,20 +233,31 @@ export const CashierTransactions: React.FC = () => {
                        </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                       <div className="relative group inline-block">
-                          <button className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[9px] font-black uppercase tracking-wider hover:bg-gray-100 transition-all">
-                             Status
+                       <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedReceiptOrder(order)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-[10px] font-bold text-stone-700 hover:bg-[#8B1E1E] hover:text-white hover:border-[#8B1E1E] transition-all shadow-xs"
+                            title="Print or reprint receipt for this transaction"
+                          >
+                             <Printer size={12} />
+                             <span>Print</span>
                           </button>
-                          <div className="absolute right-0 bottom-full mb-2 w-32 bg-white rounded-xl shadow-xl border border-gray-150 py-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none group-hover:pointer-events-auto">
-                             {["received", "preparing", "ready", "completed", "cancelled"].map((s) => (
-                               <button 
-                                 key={s}
-                                 onClick={() => updateStatus(order.id, s)}
-                                 className="w-full text-left px-3.5 py-2 text-[10px] font-bold text-gray-500 hover:bg-gray-50 hover:text-primary capitalize transition-colors"
-                               >
-                                 {s}
-                               </button>
-                             ))}
+                          <div className="relative group inline-block">
+                             <button className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-[9px] font-black uppercase tracking-wider hover:bg-gray-100 transition-all">
+                                Status
+                             </button>
+                             <div className="absolute right-0 bottom-full mb-2 w-32 bg-white rounded-xl shadow-xl border border-gray-150 py-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none group-hover:pointer-events-auto">
+                                {["received", "preparing", "ready", "completed", "cancelled"].map((s) => (
+                                  <button 
+                                    key={s}
+                                    onClick={() => updateStatus(order.id, s)}
+                                    className="w-full text-left px-3.5 py-2 text-[10px] font-bold text-gray-500 hover:bg-gray-50 hover:text-primary capitalize transition-colors"
+                                  >
+                                    {s}
+                                  </button>
+                                ))}
+                             </div>
                           </div>
                        </div>
                     </td>
@@ -255,6 +268,15 @@ export const CashierTransactions: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {selectedReceiptOrder && (
+        <ReceiptModal
+          isOpen={Boolean(selectedReceiptOrder)}
+          mode="cashier"
+          order={selectedReceiptOrder}
+          onClose={() => setSelectedReceiptOrder(null)}
+        />
+      )}
     </div>
   );
 };

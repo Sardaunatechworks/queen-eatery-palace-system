@@ -27,10 +27,16 @@ import {
   ShieldCheck,
   ChevronRight,
   Sparkles,
+  Download,
 } from "lucide-react";
 import { PageHeader, Badge, ActionDropdown } from "../../components/ui";
 import { Input, Select, TextArea } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
+import {
+  exportInventoryToCSV,
+  exportInventoryToExcel,
+  exportInventoryToPDF,
+} from "../../utils/export";
 import type { InventoryItem, StockMovement, InventorySummaryStats, Category } from "../../types";
 import {
   getInventory,
@@ -83,6 +89,56 @@ export const InventoryManagement: React.FC = () => {
   const [formWastageType, setFormWastageType] = useState<"wastage" | "damaged">("wastage");
   const [formThreshold, setFormThreshold] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Export states
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportScope, setExportScope] = useState<"all" | "filtered" | "low_stock">("all");
+  const [exportFormat, setExportFormat] = useState<"excel" | "csv" | "pdf">("excel");
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportInventory = async (
+    scope: "all" | "filtered" | "low_stock" = exportScope,
+    format: "excel" | "csv" | "pdf" = exportFormat
+  ) => {
+    setIsExporting(true);
+    showToast(`Preparing inventory export (${scope}) as ${format.toUpperCase()}...`, "info");
+    try {
+      let itemsToExport: InventoryItem[] = [];
+      if (scope === "filtered") {
+        itemsToExport = filteredItems;
+      } else if (scope === "low_stock") {
+        itemsToExport = items.filter(
+          (i) => Number(i.quantity ?? 0) <= Number(i.low_stock_threshold ?? 5)
+        );
+      } else {
+        itemsToExport = items;
+      }
+
+      if (itemsToExport.length === 0) {
+        showToast("No inventory items match the selected scope", "warning");
+        return;
+      }
+
+      const fileDate = new Date().toISOString().slice(0, 10);
+      const filename = `Queens_Palace_Inventory_${scope}_${fileDate}`;
+
+      if (format === "csv") {
+        exportInventoryToCSV(itemsToExport, filename);
+      } else if (format === "excel") {
+        exportInventoryToExcel(itemsToExport, filename);
+      } else {
+        exportInventoryToPDF(itemsToExport, filename);
+      }
+
+      showToast(`Exported ${itemsToExport.length} inventory items successfully as ${format.toUpperCase()}`, "success");
+      setShowExportModal(false);
+    } catch (err: any) {
+      console.error("Inventory export failed:", err);
+      showToast(err.message || "Failed to export inventory", "error");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // Initial Load
   const loadData = useCallback(async (isRefresh = false) => {
@@ -326,6 +382,17 @@ export const InventoryManagement: React.FC = () => {
               disabled={refreshing || loading}
             >
               Refresh
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="md"
+              icon={<Download size={15} className="text-stone-600" />}
+              onClick={() => setShowExportModal(true)}
+              disabled={loading || items.length === 0}
+            >
+              Export Inventory
             </Button>
 
             <Button
@@ -1208,6 +1275,183 @@ export const InventoryManagement: React.FC = () => {
               <Button type="button" variant="outline" size="sm" onClick={() => setHistoryModalOpen(false)}>
                 Close
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Inventory Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl border border-stone-200 max-w-lg w-full overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-stone-200 flex items-center justify-between bg-stone-50/70">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#8B1E1E]/10 flex items-center justify-center text-[#8B1E1E]">
+                  <Download size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-stone-900">Export Inventory Report</h3>
+                  <p className="text-xs text-stone-500">
+                    Export stock quantities, portion health, and asset valuation.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowExportModal(false)}
+                className="p-1.5 text-stone-400 hover:text-stone-700 rounded-lg hover:bg-stone-200/60 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-5 space-y-5">
+              {/* Scope Selection */}
+              <div>
+                <label className="text-xs font-semibold text-stone-700 block mb-2">
+                  Select Export Scope
+                </label>
+                <div className="grid grid-cols-1 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExportScope("all")}
+                    className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
+                      exportScope === "all"
+                        ? "border-[#8B1E1E] bg-[#8B1E1E]/5 ring-1 ring-[#8B1E1E]"
+                        : "border-stone-200 hover:border-stone-300 bg-white"
+                    }`}
+                  >
+                    <Boxes size={18} className={exportScope === "all" ? "text-[#8B1E1E]" : "text-stone-400"} />
+                    <div className="flex-1">
+                      <span className="text-xs font-bold text-stone-900 block">
+                        All Tracked Dishes ({items.length} items)
+                      </span>
+                      <span className="text-[11px] text-stone-500 block mt-0.5">
+                        Complete inventory catalog including all stock levels and categories.
+                      </span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExportScope("filtered")}
+                    className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
+                      exportScope === "filtered"
+                        ? "border-[#8B1E1E] bg-[#8B1E1E]/5 ring-1 ring-[#8B1E1E]"
+                        : "border-stone-200 hover:border-stone-300 bg-white"
+                    }`}
+                  >
+                    <Filter size={18} className={exportScope === "filtered" ? "text-[#8B1E1E]" : "text-stone-400"} />
+                    <div className="flex-1">
+                      <span className="text-xs font-bold text-stone-900 block">
+                        Currently Filtered View ({filteredItems.length} items)
+                      </span>
+                      <span className="text-[11px] text-stone-500 block mt-0.5">
+                        Matches your current search & category/status filter criteria.
+                      </span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExportScope("low_stock")}
+                    className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
+                      exportScope === "low_stock"
+                        ? "border-[#8B1E1E] bg-[#8B1E1E]/5 ring-1 ring-[#8B1E1E]"
+                        : "border-stone-200 hover:border-stone-300 bg-white"
+                    }`}
+                  >
+                    <AlertTriangle size={18} className={exportScope === "low_stock" ? "text-amber-600" : "text-stone-400"} />
+                    <div className="flex-1">
+                      <span className="text-xs font-bold text-stone-900 block">
+                        Low Stock & Out of Stock Only ({summary.low_stock_count + summary.out_of_stock_count} items)
+                      </span>
+                      <span className="text-[11px] text-stone-500 block mt-0.5">
+                        Urgent restock candidate items at or below alert thresholds.
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Format Selection */}
+              <div>
+                <label className="text-xs font-semibold text-stone-700 block mb-2">
+                  Choose Export Format
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExportFormat("excel")}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all ${
+                      exportFormat === "excel"
+                        ? "border-emerald-600 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-600 font-bold"
+                        : "border-stone-200 hover:border-stone-300 text-stone-700 bg-white text-xs font-medium"
+                    }`}
+                  >
+                    <FileSpreadsheet size={20} className="text-emerald-700 mb-1" />
+                    <span className="text-xs">Excel (.xlsx)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExportFormat("csv")}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all ${
+                      exportFormat === "csv"
+                        ? "border-[#8B1E1E] bg-[#8B1E1E]/5 text-stone-900 ring-1 ring-[#8B1E1E] font-bold"
+                        : "border-stone-200 hover:border-stone-300 text-stone-700 bg-white text-xs font-medium"
+                    }`}
+                  >
+                    <Download size={20} className="text-stone-600 mb-1" />
+                    <span className="text-xs">CSV (.csv)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExportFormat("pdf")}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all ${
+                      exportFormat === "pdf"
+                        ? "border-red-600 bg-red-50 text-red-900 ring-1 ring-red-600 font-bold"
+                        : "border-stone-200 hover:border-stone-300 text-stone-700 bg-white text-xs font-medium"
+                    }`}
+                  >
+                    <FileText size={20} className="text-red-700 mb-1" />
+                    <span className="text-xs">PDF Document</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-stone-50 border-t border-stone-200 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowExportModal(false)}
+                disabled={isExporting}
+                className="px-4 py-2 rounded-lg border border-stone-200 bg-white hover:bg-stone-100 text-stone-700 text-xs font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExportInventory(exportScope, exportFormat)}
+                disabled={isExporting}
+                className="inline-flex items-center gap-2 px-5 py-2 bg-[#8B1E1E] hover:bg-[#731818] text-white text-xs font-semibold rounded-lg shadow-xs transition-colors disabled:opacity-50"
+              >
+                {isExporting ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Generating Export...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download size={14} />
+                    <span>Download {exportFormat.toUpperCase()}</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { getSalesReport, downloadReportCSV } from "../../services/reportService";
+import { 
+  getSalesReport, 
+  downloadReportCSV, 
+  getTransactionLedger, 
+  getAllInventoryForReport 
+} from "../../services/reportService";
 import type { SalesReportData } from "../../types";
 import { formatNaira } from "../../utils/format";
 import { useUI } from "../../context/UIContext";
@@ -14,8 +19,25 @@ import {
   FileSpreadsheet,
   Layers,
   CreditCard,
+  Boxes,
+  Receipt,
+  X,
+  CheckCircle2,
 } from "lucide-react";
-import { exportToCSV, exportToExcel, exportToPDF } from "../../utils/export";
+import { 
+  exportToCSV, 
+  exportToExcel, 
+  exportToPDF,
+  exportInventoryToCSV,
+  exportInventoryToExcel,
+  exportInventoryToPDF,
+  exportTransactionsToCSV,
+  exportTransactionsToExcel,
+  exportTransactionsToPDF,
+  exportSalesReportToCSV,
+  exportSalesReportToExcel,
+  exportSalesReportToPDF,
+} from "../../utils/export";
 import {
   AreaChart,
   Area,
@@ -42,6 +64,12 @@ export const Reports: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>("overview");
   const [loading, setLoading] = useState(true);
   const { showToast } = useUI();
+
+  // Export Center State
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportType, setExportType] = useState<"sales" | "transactions" | "inventory">("sales");
+  const [exportFormat, setExportFormat] = useState<"excel" | "csv" | "pdf">("excel");
+  const [isExporting, setIsExporting] = useState(false);
 
   const fetchReportData = useCallback(async () => {
     setLoading(true);
@@ -129,43 +157,94 @@ export const Reports: React.FC = () => {
     };
   }, [salesData]);
 
-  const handleExport = async (type: "csv" | "excel" | "pdf") => {
-    if (!salesData || stats.chartData.length === 0) {
-      showToast("No data to export", "info");
-      return;
-    }
+  const executeExport = async (
+    targetType: "sales" | "transactions" | "inventory" = exportType,
+    targetFormat: "excel" | "csv" | "pdf" = exportFormat
+  ) => {
+    setIsExporting(true);
+    showToast(`Preparing ${targetType} export as ${targetFormat.toUpperCase()}...`, "info");
+    try {
+      if (targetType === "inventory") {
+        const invRes = await getAllInventoryForReport();
+        const items = invRes.data?.all_items || invRes.data?.low_stock_items || [];
+        if (items.length === 0) {
+          showToast("No inventory records found to export", "warning");
+          return;
+        }
 
-    if (type === "csv") {
-      try {
-        await downloadReportCSV("sales");
-        showToast("Sales report downloaded successfully", "success");
-        return;
-      } catch {
-        // Fallback to client-side CSV
+        if (targetFormat === "csv") {
+          try {
+            await downloadReportCSV("inventory");
+            showToast("Inventory report downloaded successfully", "success");
+            setShowExportModal(false);
+            return;
+          } catch {
+            exportInventoryToCSV(items);
+          }
+        } else if (targetFormat === "excel") {
+          exportInventoryToExcel(items);
+        } else {
+          exportInventoryToPDF(items);
+        }
+        showToast(`Exported ${items.length} inventory items successfully`, "success");
+      } else if (targetType === "transactions") {
+        // Fetch all transactions regardless of amount (no limit cap)
+        const txRes = await getTransactionLedger({ period: timeRange, per_page: 5000 });
+        const txs = txRes.data || [];
+        if (txs.length === 0) {
+          showToast("No transactions found in this period", "warning");
+          return;
+        }
+
+        if (targetFormat === "csv") {
+          try {
+            await downloadReportCSV("transactions");
+            showToast("Transaction ledger downloaded successfully", "success");
+            setShowExportModal(false);
+            return;
+          } catch {
+            exportTransactionsToCSV(txs);
+          }
+        } else if (targetFormat === "excel") {
+          exportTransactionsToExcel(txs);
+        } else {
+          exportTransactionsToPDF(txs);
+        }
+        showToast(`Exported ${txs.length} transactions successfully`, "success");
+      } else {
+        // Sales & Revenue Performance Report
+        if (!salesData || stats.chartData.length === 0) {
+          showToast("No sales data available in this period", "warning");
+          return;
+        }
+
+        if (targetFormat === "csv") {
+          try {
+            await downloadReportCSV("sales");
+            showToast("Sales report downloaded successfully", "success");
+            setShowExportModal(false);
+            return;
+          } catch {
+            exportSalesReportToCSV(salesData);
+          }
+        } else if (targetFormat === "excel") {
+          exportSalesReportToExcel(salesData);
+        } else {
+          exportSalesReportToPDF(salesData);
+        }
+        showToast("Sales report generated successfully", "success");
       }
+      setShowExportModal(false);
+    } catch (err: any) {
+      console.error("Export error:", err);
+      showToast(err.message || "Failed to export report", "error");
+    } finally {
+      setIsExporting(false);
     }
+  };
 
-    const exportRows = stats.chartData.map((c) => ({
-      Date: c.date,
-      Revenue: c.revenue,
-      Orders: c.orders,
-    }));
-
-    switch (type) {
-      case "csv":
-        exportToCSV(exportRows, "Sales_Report");
-        break;
-      case "excel":
-        exportToExcel(exportRows, "Sales_Report");
-        break;
-      case "pdf":
-        exportToPDF(
-          ["Date", "Revenue (NGN)", "Orders Count"],
-          exportRows.map((d) => [d.Date, String(d.Revenue), String(d.Orders)]),
-          "The Queen's Palace Eatery Sales Report"
-        );
-        break;
-    }
+  const handleExport = async (format: "csv" | "excel" | "pdf") => {
+    await executeExport(exportType, format);
   };
 
   const PIE_COLORS = ["#8B1E1E", "#D4AF37", "#1E7A3E", "#2563EB", "#7C3AED"];
@@ -199,10 +278,19 @@ export const Reports: React.FC = () => {
             {/* Export buttons */}
             <div className="inline-flex items-center gap-1.5">
               <Button
+                variant="primary"
+                size="sm"
+                icon={<Download size={14} />}
+                onClick={() => setShowExportModal(true)}
+              >
+                Export Center
+              </Button>
+              <Button
                 variant="outline"
                 size="sm"
                 icon={<FileText size={14} className="text-red-700" />}
                 onClick={() => handleExport("pdf")}
+                disabled={isExporting}
               >
                 PDF
               </Button>
@@ -211,6 +299,7 @@ export const Reports: React.FC = () => {
                 size="sm"
                 icon={<FileSpreadsheet size={14} className="text-emerald-700" />}
                 onClick={() => handleExport("excel")}
+                disabled={isExporting}
               >
                 Excel
               </Button>
@@ -219,6 +308,7 @@ export const Reports: React.FC = () => {
                 size="sm"
                 icon={<Download size={14} className="text-stone-600" />}
                 onClick={() => handleExport("csv")}
+                disabled={isExporting}
               >
                 CSV
               </Button>
@@ -634,6 +724,183 @@ export const Reports: React.FC = () => {
             </div>
           )}
         </>
+      )}
+
+      {/* Export Center Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl border border-stone-200 max-w-lg w-full overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-stone-200 flex items-center justify-between bg-stone-50/70">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#8B1E1E]/10 flex items-center justify-center text-[#8B1E1E]">
+                  <Download size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-stone-900">Export Management Reports</h3>
+                  <p className="text-xs text-stone-500">
+                    Export enriched financial, transaction, and inventory datasets.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowExportModal(false)}
+                className="p-1.5 text-stone-400 hover:text-stone-700 rounded-lg hover:bg-stone-200/60 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-5 space-y-5">
+              {/* Report Type Selector */}
+              <div>
+                <label className="text-xs font-semibold text-stone-700 block mb-2">
+                  Select Report Dataset
+                </label>
+                <div className="grid grid-cols-1 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExportType("sales")}
+                    className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
+                      exportType === "sales"
+                        ? "border-[#8B1E1E] bg-[#8B1E1E]/5 ring-1 ring-[#8B1E1E]"
+                        : "border-stone-200 hover:border-stone-300 bg-white"
+                    }`}
+                  >
+                    <TrendingUp size={18} className={exportType === "sales" ? "text-[#8B1E1E]" : "text-stone-400"} />
+                    <div className="flex-1">
+                      <span className="text-xs font-bold text-stone-900 block">
+                        Sales & Revenue Performance
+                      </span>
+                      <span className="text-[11px] text-stone-500 block mt-0.5">
+                        Daily gross sales, average ticket, packaging fees, and channel distributions ({timeRange}).
+                      </span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExportType("transactions")}
+                    className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
+                      exportType === "transactions"
+                        ? "border-[#8B1E1E] bg-[#8B1E1E]/5 ring-1 ring-[#8B1E1E]"
+                        : "border-stone-200 hover:border-stone-300 bg-white"
+                    }`}
+                  >
+                    <Receipt size={18} className={exportType === "transactions" ? "text-[#8B1E1E]" : "text-stone-400"} />
+                    <div className="flex-1">
+                      <span className="text-xs font-bold text-stone-900 block">
+                        Transaction Ledger (Unlimited)
+                      </span>
+                      <span className="text-[11px] text-stone-500 block mt-0.5">
+                        Every single transaction line with order #, customer, cashier, amount, method, and status regardless of volume.
+                      </span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExportType("inventory")}
+                    className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
+                      exportType === "inventory"
+                        ? "border-[#8B1E1E] bg-[#8B1E1E]/5 ring-1 ring-[#8B1E1E]"
+                        : "border-stone-200 hover:border-stone-300 bg-white"
+                    }`}
+                  >
+                    <Boxes size={18} className={exportType === "inventory" ? "text-[#8B1E1E]" : "text-stone-400"} />
+                    <div className="flex-1">
+                      <span className="text-xs font-bold text-stone-900 block">
+                        Inventory Valuation & Stock Health
+                      </span>
+                      <span className="text-[11px] text-stone-500 block mt-0.5">
+                        All tracked menu dishes, available portions, unit prices, alert thresholds, and total asset valuation.
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Format Selector */}
+              <div>
+                <label className="text-xs font-semibold text-stone-700 block mb-2">
+                  Choose Export Format
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExportFormat("excel")}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all ${
+                      exportFormat === "excel"
+                        ? "border-emerald-600 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-600 font-bold"
+                        : "border-stone-200 hover:border-stone-300 text-stone-700 bg-white text-xs font-medium"
+                    }`}
+                  >
+                    <FileSpreadsheet size={20} className="text-emerald-700 mb-1" />
+                    <span className="text-xs">Excel (.xlsx)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExportFormat("csv")}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all ${
+                      exportFormat === "csv"
+                        ? "border-[#8B1E1E] bg-[#8B1E1E]/5 text-stone-900 ring-1 ring-[#8B1E1E] font-bold"
+                        : "border-stone-200 hover:border-stone-300 text-stone-700 bg-white text-xs font-medium"
+                    }`}
+                  >
+                    <Download size={20} className="text-stone-600 mb-1" />
+                    <span className="text-xs">CSV (.csv)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExportFormat("pdf")}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all ${
+                      exportFormat === "pdf"
+                        ? "border-red-600 bg-red-50 text-red-900 ring-1 ring-red-600 font-bold"
+                        : "border-stone-200 hover:border-stone-300 text-stone-700 bg-white text-xs font-medium"
+                    }`}
+                  >
+                    <FileText size={20} className="text-red-700 mb-1" />
+                    <span className="text-xs">PDF Document</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-stone-50 border-t border-stone-200 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowExportModal(false)}
+                disabled={isExporting}
+                className="px-4 py-2 rounded-lg border border-stone-200 bg-white hover:bg-stone-100 text-stone-700 text-xs font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => executeExport(exportType, exportFormat)}
+                disabled={isExporting}
+                className="inline-flex items-center gap-2 px-5 py-2 bg-[#8B1E1E] hover:bg-[#731818] text-white text-xs font-semibold rounded-lg shadow-xs transition-colors disabled:opacity-50"
+              >
+                {isExporting ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Generating Export...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download size={14} />
+                    <span>Download {exportFormat.toUpperCase()}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
