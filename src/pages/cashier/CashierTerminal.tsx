@@ -48,7 +48,7 @@ export const CashierTerminal: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "pos" | "transfer">("cash");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "pos">("cash");
   const [selectedPendingOrder, setSelectedPendingOrder] = useState<any>(null);
   const [packUnitPrice, setPackUnitPrice] = useState<number>(300);
   const [packagingQty, setPackagingQty] = useState<number>(0);
@@ -451,7 +451,7 @@ export const CashierTerminal: React.FC = () => {
         packaging_unit_price: packUnitPrice,
         packaging_fee: packagingFee,
         total: grandTotal,
-        paymentMethod,
+        paymentMethod: paymentMethod === "pos" ? "POS / Transfer" : "Cash",
         createdAt: new Date(),
       });
       setCart([]);
@@ -831,40 +831,29 @@ export const CashierTerminal: React.FC = () => {
                 <span className="text-base font-bold text-[#8B1E1E] font-mono">{formatNaira(grandTotal)}</span>
               </div>
 
-              {/* Payment Method Switcher */}
-              <div className="grid grid-cols-3 gap-1.5 pt-1">
+              {/* Payment Method Switcher (Cash or POS/Transfer) */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => setPaymentMethod("cash")}
-                  className={`h-9 border rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
+                  className={`h-9 border rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors ${
                     paymentMethod === "cash"
                       ? "bg-stone-900 text-white border-stone-900 shadow-xs"
                       : "bg-white text-stone-700 border-stone-300 hover:bg-stone-50"
                   }`}
                 >
-                  <Wallet size={13} /> Cash
+                  <Wallet size={14} /> Cash
                 </button>
                 <button
                   type="button"
                   onClick={() => setPaymentMethod("pos")}
-                  className={`h-9 border rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
+                  className={`h-9 border rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors ${
                     paymentMethod === "pos"
                       ? "bg-stone-900 text-white border-stone-900 shadow-xs"
                       : "bg-white text-stone-700 border-stone-300 hover:bg-stone-50"
                   }`}
                 >
-                  <CreditCard size={13} /> POS
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod("transfer")}
-                  className={`h-9 border rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
-                    paymentMethod === "transfer"
-                      ? "bg-stone-900 text-white border-stone-900 shadow-xs"
-                      : "bg-white text-stone-700 border-stone-300 hover:bg-stone-50"
-                  }`}
-                >
-                  <ArrowRightLeft size={13} /> Transfer
+                  <CreditCard size={14} /> POS / Transfer
                 </button>
               </div>
 
@@ -1186,7 +1175,10 @@ export const CashierTerminal: React.FC = () => {
                       const itemsCount = ord.items?.length || 0;
                       const totalVal = Number(ord.total ?? ord.total_amount ?? 0);
                       const isPaid = (ord.payment_status || ord.paymentStatus) === "paid";
-                      const pMethod = ord.payment_method || ord.paymentMethod || "cash";
+                      const rawMethod = String(ord.payment_method || ord.paymentMethod || "cash").toLowerCase();
+                      const displayMethod = (rawMethod === "pos" || rawMethod === "transfer" || rawMethod.includes("pos") || rawMethod.includes("transfer"))
+                        ? "POS / Transfer"
+                        : (rawMethod === "cash" ? "Cash" : rawMethod);
 
                       return (
                         <tr key={ord.id} className="hover:bg-stone-50/80 transition-colors">
@@ -1218,7 +1210,7 @@ export const CashierTerminal: React.FC = () => {
                                   : "bg-amber-50 text-amber-700 border border-amber-200"
                               }`}
                             >
-                              {isPaid ? "Paid" : "Unpaid"} • {pMethod}
+                              {isPaid ? "Paid" : "Unpaid"} • {displayMethod}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-right whitespace-nowrap">

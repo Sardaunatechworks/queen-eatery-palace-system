@@ -95,6 +95,11 @@ class OrderController
         $authUser = $_REQUEST['auth_user'];
         $input = $_REQUEST['json_input'] ?? [];
 
+        // Normalize POS/Transfer payment method aliases to 'pos'
+        if (isset($input['payment_method']) && in_array(strtolower(trim($input['payment_method'])), ['pos_transfer', 'pos / transfer', 'pos/transfer'])) {
+            $input['payment_method'] = 'pos';
+        }
+
         $validator = new Validator();
         $validator->required($input, 'items', 'Order items')
                   ->isArray($input, 'items', 'Order items')
@@ -252,6 +257,9 @@ class OrderController
         $input = $_REQUEST['json_input'] ?? [];
 
         $method = $input['payment_method'] ?? 'cash';
+        if (in_array(strtolower(trim($method)), ['pos_transfer', 'pos / transfer', 'pos/transfer'])) {
+            $method = 'pos';
+        }
         $amount = (float) ($input['amount'] ?? 0.00);
 
         $result = $this->orderService->recordPayment($id, $method, $amount, $authUser);

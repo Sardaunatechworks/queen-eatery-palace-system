@@ -84,7 +84,17 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   })();
 
   const staffName = order.cashierName || order.cashier_name || 'Palace Attendant';
-  const paymentMode = order.paymentMethod || order.payment_method || 'Direct';
+  const paymentMode = (() => {
+    const raw = String(order.paymentMethod || order.payment_method || 'Direct').trim();
+    const lower = raw.toLowerCase();
+    if (lower === 'pos' || lower === 'transfer' || lower === 'pos / transfer' || lower === 'pos/transfer' || lower === 'pos_transfer') {
+      return 'POS / Transfer';
+    }
+    if (lower === 'cash') {
+      return 'Cash';
+    }
+    return raw;
+  })();
 
   // Generate plain text receipt for WhatsApp and Clipboard
   const generateReceiptText = () => {
@@ -760,7 +770,7 @@ ${order.deliveryType === 'delivery' && order.address ? `📍 *Delivery Address:*
                     Total Paid
                   </span>
                   <span className="text-[10px] text-[#F3F4F6] font-medium">
-                    {order.paymentMethod || 'Direct Payment'}
+                    {paymentMode}
                   </span>
                 </div>
                 <span className="text-xl sm:text-2xl font-black text-[#FDE68A] tracking-tight tabular-nums">
